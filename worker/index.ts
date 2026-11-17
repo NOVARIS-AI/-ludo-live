@@ -8,7 +8,7 @@ type Player = { id: string; name: string; color: string; host: boolean; joinedAt
 type Room = {
   id: string; code: string; players: Player[]; status: "waiting" | "playing" | "finished";
   mode: "friends" | "computer"; gameMode: "classic" | "one-v-one" | "duo";
-  state: { currentTurnIndex: number; dice: number | null; consecutiveSixes: number; tokens: Record<string, number[]>; winner: string | null; winnerTeam: string | null; turnMessage: string; lastRoll: number | null };
+  state: { currentTurnIndex: number; dice: number | null; consecutiveSixes: number; tokens: Record<string, number[]>; winner: string | null; winnerTeam: string | null; turnMessage: string; lastRoll: number | null; botActionVersion?: number };
   messages: Array<{ id: string; playerId: string; name: string; color: string; text: string; kind: string; createdAt: number }>;
   callParticipants: string[]; version: number; createdAt: number; lastActivity: number;
 };
@@ -28,7 +28,7 @@ function nameOf(v: unknown) {
   return name;
 }
 function newState(players: Player[], message: string) {
-  return { currentTurnIndex: 0, dice: null, consecutiveSixes: 0, tokens: Object.fromEntries(players.map(p => [p.id, [-1, -1, -1, -1]])), winner: null, winnerTeam: null, turnMessage: message, lastRoll: null };
+  return { currentTurnIndex: 0, dice: null, consecutiveSixes: 0, tokens: Object.fromEntries(players.map(p => [p.id, [-1, -1, -1, -1]])), winner: null, winnerTeam: null, turnMessage: message, lastRoll: null, botActionVersion: 0 };
 }
 function nextPlayer(room: Room, index: number) { return (index + 1) % room.players.length; }
 function validMoves(room: Room, playerId: string, dice: number) {
@@ -169,6 +169,40 @@ export class LudoRoom {
       room.state.turnMessage = "No legal move. " + room.players[room.state.currentTurnIndex].name + " is up next.";
       return this.save(room);
     }
+    if (action === "bot/turn") {
+      const expected = Number(input.expectedActionVersion || 0);
+      if (room.status !== "playing") return fail("The match is not active.");
+      const bot = room.players[room.state.currentTurnIndex];
+      if (!bot?.isBot || room.mode !== "computer") return fail("It is not a computer turn.", 403);
+      const version = room.state.botActionVersion || 0;
+      if (expected !== version) return fail("Computer turn already processed.", 409);
+      room.state.botActionVersion = version + 1;
+      const dice = Math.floor(Math.random() * 6) + 1;
+      room.state.lastRoll = dice;
+      if (dice === 6 && room.state.consecutiveSixes >= 2) {
+        room.state.dice = null; room.state.consecutiveSixes = 0; room.state.currentTurnIndex = nextPlayer(room, room.state.currentTurnIndex);
+        room.state.turnMessage = "Three sixes! " + room.players[room.state.currentTurnIndex].name + " gets the next turn.";
+      } else {
+        room.state.consecutiveSixes = dice === 6 ? room.state.consecutiveSixes + 1 : 0;
+        const moves = validMoves(room, bot.id, dice);
+        if (!moves.length) {
+          room.state.dice = null; room.state.consecutiveSixes = 0; room.state.currentTurnIndex = nextPlayer(room, room.state.currentTurnIndex);
+          room.state.turnMessage = bot.name + " rolled a " + dice + " but has no legal move.";
+        } else {
+          const token = moves.find(i => room.state.tokens[bot.id][i] === -1) ?? moves[moves.length - 1];
+          const captured = moveToken(room, bot, token, dice);
+          if (room.state.tokens[bot.id].every(p => p === 57)) {
+            room.status = "finished"; room.state.winner = bot.id; room.state.dice = null; room.state.turnMessage = bot.name + " wins the game!";
+          } else if (dice === 6) {
+            room.state.dice = null; room.state.turnMessage = captured ? bot.name + " captured a token and gets another roll!" : bot.name + " rolled a six and gets another roll!";
+          } else {
+            room.state.dice = null; room.state.currentTurnIndex = nextPlayer(room, room.state.currentTurnIndex);
+            room.state.turnMessage = room.players[room.state.currentTurnIndex].name + " is up next.";
+          }
+        }
+      }
+      return this.save(room);
+    }
     if (action === "chat") {
       const index = requirePlayer(room, playerId), text = clean(input.text, 140);
       if (!text) return fail("Write a message first.");
@@ -176,6 +210,32 @@ export class LudoRoom {
       room.messages.push({ id: crypto.randomUUID(), playerId, name: player.name, color: player.color, text, kind: input.kind === "reaction" ? "reaction" : "chat", createdAt: Date.now() });
       room.messages = room.messages.slice(-40);
       return this.save(room);
+    }
+    if (action === "private-chat" || action === "private-chat/list") {
+      const peerId = clean(action === "private-chat" ? input.toPlayerId : input.peerId);
+      requirePlayer(room, playerId); requirePlayer(room, peerId);
+      const peer = room.players.find(p => p.id === peerId);
+      if (peerId === playerId || peer?.isBot) return fail("Choose another human player for private chat.");
+      const key = "dm:" + [playerId, peerId].sort().join(":");
+      const messages = await this.state.storage.get<any[]>(key) || [];
+      if (action === "private-chat/list") return json({ messages: messages.slice(-40) });
+      const text = clean(input.text, 140);
+      if (!text) return fail("Write a message first.");
+      const sender = room.players.find(p => p.id === playerId)!;
+      const message = { id: crypto.randomUUID(), playerId, name: sender.name, color: sender.color, text, kind: "chat", createdAt: Date.now(), recipientId: peerId };
+      messages.push(message); await this.state.storage.put(key, messages.slice(-80));
+      await this.broadcast("private-chat", room.code + "_" + playerId, { message });
+      await this.broadcast("private-chat", room.code + "_" + peerId, { message });
+      return json({ message });
+    }
+    if (action === "signal") {
+      const toPlayerId = clean(input.toPlayerId), signal = input.signal as any;
+      requirePlayer(room, playerId);
+      if (!room.callParticipants.includes(playerId) || !room.callParticipants.includes(toPlayerId)) return fail("Both players must join the live call first.", 403);
+      if (!room.players.some(p => p.id === toPlayerId)) return fail("Player not found.", 404);
+      if (!signal || !["offer", "answer", "ice"].includes(signal.type) || JSON.stringify(signal).length > 30000) return fail("Invalid call signal.");
+      await this.broadcast("call-signal", room.code, { fromPlayerId: playerId, toPlayerId, signal });
+      return json({ sent: true });
     }
     if (action === "call/join" || action === "call/leave") {
       requirePlayer(room, playerId);
