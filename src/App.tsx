@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ws } from './lib/realtime';
-import { api } from './lib/api';
+import { api, setAuthToken } from './lib/api';
 import CompetitionHub from './CompetitionHub';
 import {
   ArrowRight,
@@ -379,7 +379,15 @@ function MediaTile({
 }
 
 export default function App() {
-  const playerId = useMemo(() => playerIdForDevice(), []);
+  const [authUser, setAuthUser] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
+  const playerId = authUser?.id || 'pending-authentication';
   const [name, setName] = useState(
     localStorage.getItem('ludo-live-player-name') || ''
   );
@@ -424,6 +432,39 @@ export default function App() {
   const roomCodeRef = useRef<string | null>(null);
   const botActionInFlightRef = useRef<string | null>(null);
   roomCodeRef.current = room?.code || null;
+
+  useEffect(() => {
+    const token = localStorage.getItem('ludo-live-auth-token');
+    if (!token) { setAuthLoading(false); return; }
+    api.get('/api/auth/me').then(response => {
+      const user = response.data?.user;
+      if (user?.id) {
+        setAuthUser(user);
+        setName(user.name || '');
+        localStorage.setItem('ludo-live-player-name', user.name || '');
+      } else setAuthToken(null);
+    }).catch(() => setAuthToken(null)).finally(() => setAuthLoading(false));
+  }, []);
+
+  async function submitAuth(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setAuthBusy(true); setAuthError('');
+    try {
+      const endpoint = authMode === 'register' ? '/api/auth/register' : '/api/auth/login';
+      const payload = authMode === 'register' ? { name: authName, email: authEmail, password: authPassword } : { email: authEmail, password: authPassword };
+      const response = await api.post(endpoint, payload);
+      const user = response.data?.user, token = response.data?.token;
+      if (!user?.id || !token) throw new Error('The account session could not be created.');
+      setAuthToken(token); setAuthUser(user); setName(user.name || '');
+      localStorage.setItem('ludo-live-player-name', user.name || '');
+    } catch (error) { setAuthError(getErrorMessage(error)); }
+    finally { setAuthBusy(false); }
+  }
+
+  async function signOut() {
+    try { await api.post('/api/auth/logout', {}); } catch { /* clear local session even if offline */ }
+    setAuthToken(null); setAuthUser(null); setRoom(null);
+    localStorage.removeItem('ludo-live-room-code');
+  }
 
   const me = room?.players.find(player => player.id === playerId) || null;
   const currentPlayer = room?.players[room.state.currentTurnIndex] || null;
@@ -497,13 +538,14 @@ export default function App() {
   }, [playerId]);
 
   useEffect(() => {
+    if (!authUser?.id) return;
     const savedCode = localStorage.getItem('ludo-live-room-code');
     if (!savedCode) return;
     api
       .get('/api/rooms/' + savedCode)
       .then(response => setRoom(response.data.room as Room))
       .catch(() => localStorage.removeItem('ludo-live-room-code'));
-  }, []);
+  }, [authUser?.id]);
 
   useEffect(() => {
     if (!room?.code || socketState !== 'live') return;
@@ -1355,6 +1397,28 @@ export default function App() {
         <footer className="landing-footer">
           LUDO LIVE <span>•</span> FRIENDS MAKE THE GAME
         </footer>
+      </main>
+    );
+  }
+
+  if (authLoading) return <main className="auth-screen"><div className="auth-card"><div className="auth-brand">LUDO <b>LIVE</b></div><p>Checking your player session…</p></div></main>;
+  if (!authUser) {
+    return (
+      <main className="auth-screen">
+        <form className="auth-card" onSubmit={submitAuth}>
+          <div className="auth-brand">LUDO <b>LIVE</b></div>
+          <span className="auth-kicker">YOUR PLAYER IDENTITY</span>
+          <h1>{authMode === 'login' ? 'Welcome back' : 'Create your player account'}</h1>
+          <p>Sign in to keep your player profile, progress and matches connected across devices.</p>
+          {authMode === 'register' ? <label>Display name<input required minLength={2} maxLength={24} value={authName} onChange={event => setAuthName(event.target.value)} placeholder="Your player name" /></label> : null}
+          <label>Email address<input required type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>
+          <label>Password<input required type="password" minLength={10} autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={event => setAuthPassword(event.target.value)} placeholder={authMode === 'register' ? 'At least 10 characters' : 'Your password'} /></label>
+          {authMode === 'register' ? <small>Use at least 10 characters, with letters and numbers.</small> : null}
+          {authError ? <div className="auth-error" role="alert">{authError}</div> : null}
+          <button className="auth-submit" type="submit" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'login' ? 'Sign in' : 'Create account'}</button>
+          <button className="auth-switch" type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}>{authMode === 'login' ? 'New to Ludo Live? Create an account' : 'Already have an account? Sign in'}</button>
+          <small className="auth-privacy">Passwords are hashed on the server. Keep your sign-in details private.</small>
+        </form>
       </main>
     );
   }
