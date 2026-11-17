@@ -431,7 +431,7 @@ export default function App() {
   }
 
   const movableTokens =
-    room?.state.dice === null || !myTurn
+    room === null || room.state.dice === null || !myTurn
       ? []
       : myTokens
           .map((position, index) =>
@@ -1718,7 +1718,7 @@ export default function App() {
               <Users size={19} />
             </div>
             <div className="player-list">
-              {room.players.map((player, index) => (
+              {room.players.map(player => (
                 <div
                   className={
                     'player-row ' +
