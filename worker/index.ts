@@ -2,6 +2,7 @@ export interface Env {
   LUDO_ROOMS: DurableObjectNamespace;
   REALTIME_HUB: DurableObjectNamespace;
   MATCHMAKING: DurableObjectNamespace;
+  APP_DATA: DurableObjectNamespace;
   ALLOWED_ORIGIN: string;
 }
 
@@ -103,6 +104,14 @@ export class LudoRoom {
     room.version = nextVersion; room.lastActivity = Date.now();
     await this.state.storage.put("room", room);
     await this.broadcast("room", room.code, { room });
+    if (room.status === "finished") {
+      const data = this.env.APP_DATA.get(this.env.APP_DATA.idFromName("global"));
+      await data.fetch("https://data/results", { method: "POST", body: JSON.stringify({
+        id: room.code, roomCode: room.code, winnerId: room.state.winner, winnerTeam: room.state.winnerTeam || null,
+        gameMode: room.gameMode, players: room.players.map(p => ({ id: p.id, name: p.name, teamId: p.teamId })),
+        completedAt: Date.now(), replay: room.replaySnapshots || []
+      }) });
+    }
     return json({ room });
   }
   private async action(body: { action: string; input: Record<string, unknown> }) {
@@ -324,7 +333,102 @@ export class MatchmakingLobby {
     return fail("Not found.", 404);
   }
 }
-\nexport class RealtimeHub {
+\n
+type StoredTournament = { id:string; name:string; hostId:string; hostName:string; maxPlayers:number; status:"open"|"live"|"completed"; players:Array<{id:string;name:string;joinedAt:number}>; matches:Array<{id:string;round:number;firstPlayerId:string;secondPlayerId:string|null;winnerId:string|null;roomCode?:string}>; championId?:string; createdAt:number; updatedAt:number };
+type StoredResult = { id:string; roomCode:string; winnerId:string|null; winnerTeam:string|null; gameMode:string; players:Array<{id:string;name:string;teamId?:string}>; completedAt:number; replay:any[] };
+export class AppData {
+  constructor(private state: DurableObjectState) {}
+  private async list<T>(key:string):Promise<T[]> { return await this.state.storage.get<T[]>(key) || []; }
+  private async save<T>(key:string,value:T[]) { await this.state.storage.put(key,value); }
+  async fetch(request:Request) {
+    const url=new URL(request.url), method=request.method, path=url.pathname;
+    try {
+      if (path === "/results" && method === "POST") {
+        const item=await request.json<StoredResult>();
+        if (!item.roomCode || !item.winnerId) return fail("A completed match result is required.");
+        const items=await this.list<StoredResult>("results");
+        const index=items.findIndex(x=>x.roomCode===item.roomCode);
+        if(index>=0) items[index]=item; else items.push(item);
+        await this.save("results",items.slice(-2000));
+        return json({ok:true});
+      }
+      if (path === "/leaderboard" && method === "GET") {
+        const results=await this.list<StoredResult>("results"), stats=new Map<string,{playerId:string;name:string;wins:number;matches:number}>();
+        for(const match of results) for(const player of match.players||[]) {
+          const row=stats.get(player.id)||{playerId:player.id,name:player.name,wins:0,matches:0};
+          row.matches++; if(match.winnerId===player.id || (!!match.winnerTeam && player.teamId===match.winnerTeam)) row.wins++;
+          stats.set(player.id,row);
+        }
+        return json({leaderboard:[...stats.values()].sort((a,b)=>b.wins-a.wins||b.matches-a.matches).slice(0,50)});
+      }
+      if (path.startsWith("/summary/") && method === "GET") {
+        const playerId=decodeURIComponent(path.slice(9)), results=await this.list<StoredResult>("results");
+        const matches=results.filter(m=>(m.players||[]).some(p=>p.id===playerId));
+        const wins=matches.filter(m=>m.winnerId===playerId || (!!m.winnerTeam && m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam))).length;
+        return json({playerId,matchesPlayed:matches.length,wins,losses:matches.length-wins,recentMatches:matches.slice(-8).reverse().map(m=>({roomCode:m.roomCode,result:m.winnerId===playerId||m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam)?"win":"loss",players:m.players.map(p=>p.name)}))});
+      }
+      if (path.startsWith("/blocked/") && method === "GET") {
+        const playerId=decodeURIComponent(path.slice(9)), blocks=await this.list<any>("blocks");
+        return json({blockedPlayerIds:blocks.filter(b=>b.blockerId===playerId).map(b=>b.blockedId)});
+      }
+      if (path === "/safety/block" && method === "POST") {
+        const input=await request.json<any>(), blockerId=clean(input.blockerId), blockedId=clean(input.blockedId);
+        if(!blockerId||!blockedId||blockerId===blockedId) return fail("Choose a valid player to block.");
+        const blocks=await this.list<any>("blocks");
+        if(!blocks.some(b=>b.blockerId===blockerId&&b.blockedId===blockedId)) blocks.push({blockerId,blockedId,createdAt:Date.now()});
+        await this.save("blocks",blocks.slice(-5000)); return json({ok:true});
+      }
+      if (path === "/safety/report" && method === "POST") {
+        const input=await request.json<any>(), reporterId=clean(input.reporterId), targetPlayerId=clean(input.targetPlayerId), reason=clean(input.reason,240);
+        if(!reporterId||!targetPlayerId||reporterId===targetPlayerId||reason.length<3) return fail("A valid report and reason are required.");
+        const reports=await this.list<any>("reports");
+        reports.push({id:crypto.randomUUID(),reporterId,targetPlayerId,roomCode:clean(input.roomCode,6),reason,createdAt:Date.now(),status:"open"});
+        await this.save("reports",reports.slice(-5000)); return json({ok:true});
+      }
+      if (path === "/manifest" && method === "GET") return json({integrations:[],status:"disconnected",message:"Integrations are foundations only. Connect apps only after explicit consent."});
+      if (path === "/tournaments" && method === "GET") {
+        const items=await this.list<StoredTournament>("tournaments");
+        return json({tournaments:items.sort((a,b)=>b.createdAt-a.createdAt).slice(0,40)});
+      }
+      if (path === "/tournaments" && method === "POST") {
+        const input=await request.json<any>(), hostId=clean(input.playerId), hostName=clean(input.playerName,18), name=clean(input.name,42), maxPlayers=Number(input.maxPlayers);
+        if(!hostId||!hostName||name.length<3||![4,8,16].includes(maxPlayers)) return fail("Enter a tournament name, player name and valid size.");
+        const now=Date.now(), item:StoredTournament={id:"T"+now.toString(36).toUpperCase()+Math.random().toString(36).slice(2,7).toUpperCase(),name,hostId,hostName,maxPlayers,status:"open",players:[{id:hostId,name:hostName,joinedAt:now}],matches:[],createdAt:now,updatedAt:now};
+        const items=await this.list<StoredTournament>("tournaments"); items.push(item); await this.save("tournaments",items); return json({tournament:item});
+      }
+      const match=path.match(/^\/tournaments\/([^/]+)\/(join|start|report-result)$/);
+      if(match && method==="POST") {
+        const id=decodeURIComponent(match[1]), action=match[2], input=await request.json<any>(), items=await this.list<StoredTournament>("tournaments");
+        const item=items.find(t=>t.id===id); if(!item) return fail("Tournament not found.",404);
+        const now=Date.now();
+        if(action==="join") {
+          const playerId=clean(input.playerId),name=clean(input.playerName,18);
+          if(item.status!=="open"||!playerId||!name) return fail("This tournament cannot accept that player.",409);
+          if(!item.players.some(p=>p.id===playerId)){if(item.players.length>=item.maxPlayers)return fail("This tournament is full.",409);item.players.push({id:playerId,name,joinedAt:now});}
+        } else if(action==="start") {
+          if(item.hostId!==clean(input.playerId)) return fail("Only the host can start this tournament.",403);
+          if(item.status!=="open"||item.players.length<2) return fail("Invite at least one more player first.",409);
+          const shuffled=[...item.players].sort(()=>Math.random()-.5); item.matches=[];
+          for(let i=0;i<shuffled.length;i+=2)item.matches.push({id:"R1M"+(item.matches.length+1),round:1,firstPlayerId:shuffled[i].id,secondPlayerId:shuffled[i+1]?.id||null,winnerId:shuffled[i+1]?null:shuffled[i].id});
+          item.status="live";
+          if(item.matches.every(m=>m.winnerId)){item.status="completed";item.championId=item.matches[0]?.winnerId||undefined;}
+        } else {
+          const playerId=clean(input.playerId),roomCode=clean(input.roomCode,6).toUpperCase(),results=await this.list<StoredResult>("results");
+          const result=results.find(r=>r.roomCode===roomCode); if(item.status!=="live"||!result||!result.winnerId)return fail("Submit a completed match from this tournament.",409);
+          const fixture=item.matches.find(m=>!m.winnerId&&[m.firstPlayerId,m.secondPlayerId].includes(playerId)&&result.players.some(p=>p.id===m.firstPlayerId)&&result.players.some(p=>p.id===m.secondPlayerId));
+          if(!fixture||![fixture.firstPlayerId,fixture.secondPlayerId].includes(result.winnerId))return fail("That match does not match an open tournament fixture.",409);
+          fixture.winnerId=result.winnerId;fixture.roomCode=roomCode;
+          const round=Math.max(0,...item.matches.map(m=>m.round)),current=item.matches.filter(m=>m.round===round);
+          if(current.length&&current.every(m=>m.winnerId)){const winners=current.map(m=>m.winnerId as string);if(winners.length===1){item.status="completed";item.championId=winners[0];}else{const next=round+1;for(let i=0;i<winners.length;i+=2)item.matches.push({id:"R"+next+"M"+(i/2+1),round:next,firstPlayerId:winners[i],secondPlayerId:winners[i+1]||null,winnerId:winners[i+1]?null:winners[i]});}}
+        }
+        item.updatedAt=now; await this.save("tournaments",items); return json({tournament:item});
+      }
+      return fail("Not found.",404);
+    } catch(error) { return fail(error instanceof Error?error.message:"Unexpected data error.",Number((error as any)?.status)||500); }
+  }
+}
+
+export class RealtimeHub {
   constructor(private state: DurableObjectState) {}
   async fetch(request: Request) {
     const url = new URL(request.url);
@@ -422,6 +526,16 @@ export default {
         if (request.method === "GET" && !suffix) return withCors(await stub.fetch("https://room/read"), origin);
         if (request.method === "GET" && suffix === "spectate") return withCors(await stub.fetch("https://room/read?spectate=1"), origin);
         if (request.method === "POST") return withCors(await stub.fetch("https://room/action", { method: "POST", body: JSON.stringify({ action: suffix, input: await request.json() }) }), origin);
+      }
+
+      if (url.pathname.startsWith("/api/tournaments") || url.pathname === "/api/leaderboard" || url.pathname === "/api/safety/report" || url.pathname === "/api/safety/block" || url.pathname === "/api/integrations/manifest" || /^\/api\/players\/[^/]+\/(summary|blocked)$/.test(url.pathname)) {
+        const data = env.APP_DATA.get(env.APP_DATA.idFromName("global"));
+        const parts = url.pathname.split("/").filter(Boolean);
+        let target = url.pathname.replace(/^\/api/, "");
+        if (parts[1] === "players" && parts[3] === "summary") target = "/summary/" + encodeURIComponent(parts[2]);
+        if (parts[1] === "players" && parts[3] === "blocked") target = "/blocked/" + encodeURIComponent(parts[2]);
+        if (url.pathname === "/api/integrations/manifest") target = "/manifest";
+        return withCors(await data.fetch("https://data" + target, { method: request.method, body: request.method === "GET" ? undefined : await request.text() }), origin);
       }
       if (url.pathname.startsWith("/api/matchmaking/")) {
         const action = url.pathname.split("/").pop();
