@@ -3,6 +3,14 @@ name: Deploy Ludo Live to Cloudflare
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: Deploy to staging for testing, or production after approval
+        type: choice
+        required: true
+        default: staging
+        options:
+          - staging
+          - production
       deploy_worker:
         description: Deploy the Cloudflare Worker backend
         type: boolean
@@ -18,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ludo-live-cloudflare-production
+  group: ludo-live-cloudflare-${{ inputs.target }}
   cancel-in-progress: false
 
 jobs:
@@ -33,24 +41,32 @@ jobs:
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PAGES_ORIGIN: ${{ secrets.LUDO_LIVE_PAGES_ORIGIN }}
-          WORKER_API_URL: ${{ secrets.LUDO_LIVE_WORKER_API_URL }}
-          REALTIME_URL: ${{ secrets.LUDO_LIVE_REALTIME_URL }}
+          PAGES_ORIGIN: ${{ inputs.target == 'production' && secrets.LUDO_LIVE_PAGES_ORIGIN || secrets.LUDO_STAGING_PAGES_ORIGIN }}
+          WORKER_API_URL: ${{ inputs.target == 'production' && secrets.LUDO_LIVE_WORKER_API_URL || secrets.LUDO_STAGING_WORKER_API_URL }}
+          REALTIME_URL: ${{ inputs.target == 'production' && secrets.LUDO_LIVE_REALTIME_URL || secrets.LUDO_STAGING_REALTIME_URL }}
           AUTH_READY: ${{ secrets.LUDO_AUTH_READY }}
+          TARGET: ${{ inputs.target }}
+          DEPLOY_PAGES: ${{ inputs.deploy_pages }}
+          DEPLOY_WORKER: ${{ inputs.deploy_worker }}
         run: |
           test -n "$CF_API_TOKEN" || (echo "::error::Missing CLOUDFLARE_API_TOKEN"; exit 1)
           test -n "$CF_ACCOUNT_ID" || (echo "::error::Missing CLOUDFLARE_ACCOUNT_ID"; exit 1)
-          test "$AUTH_READY" = "true" || (echo "::error::Set LUDO_AUTH_READY=true only after server-side authentication and authorization are implemented and tested"; exit 1)
-          if [[ "${{ inputs.deploy_worker }}" == "true" || "${{ inputs.deploy_pages }}" == "true" ]]; then
-            test -n "$PAGES_ORIGIN" || (echo "::error::Missing LUDO_LIVE_PAGES_ORIGIN"; exit 1)
+          if [[ "$TARGET" == "production" ]]; then
+            test "$AUTH_READY" = "true" || (echo "::error::Production is locked until staging account/security tests pass and LUDO_AUTH_READY=true is approved"; exit 1)
           fi
-          if [[ "${{ inputs.deploy_pages }}" == "true" ]]; then
-            test -n "$WORKER_API_URL" || (echo "::error::Missing LUDO_LIVE_WORKER_API_URL"; exit 1)
-            test -n "$REALTIME_URL" || (echo "::error::Missing LUDO_LIVE_REALTIME_URL"; exit 1)
+          if [[ "$DEPLOY_WORKER" == "true" || "$DEPLOY_PAGES" == "true" ]]; then
+            test -n "$PAGES_ORIGIN" || (echo "::error::Missing Pages origin secret for $TARGET"; exit 1)
+          fi
+          if [[ "$DEPLOY_PAGES" == "true" ]]; then
+            test -n "$WORKER_API_URL" || (echo "::error::Missing Worker API URL secret for $TARGET"; exit 1)
+            test -n "$REALTIME_URL" || (echo "::error::Missing realtime URL secret for $TARGET"; exit 1)
           fi
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Build and type-check
+        env:
+          VITE_API_BASE_URL: ${{ inputs.target == 'production' && secrets.LUDO_LIVE_WORKER_API_URL || secrets.LUDO_STAGING_WORKER_API_URL }}
+          VITE_REALTIME_URL: ${{ inputs.target == 'production' && secrets.LUDO_LIVE_REALTIME_URL || secrets.LUDO_STAGING_REALTIME_URL }}
         run: |
           npm run typecheck
           npm run build
@@ -71,8 +87,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          PAGES_ORIGIN: ${{ secrets.LUDO_LIVE_PAGES_ORIGIN }}
-        run: npx wrangler deploy --var "ALLOWED_ORIGIN:$PAGES_ORIGIN"
+          PAGES_ORIGIN: ${{ inputs.target == 'production' && secrets.LUDO_LIVE_PAGES_ORIGIN || secrets.LUDO_STAGING_PAGES_ORIGIN }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          if [[ "$TARGET" == "production" ]]; then WORKER_NAME="ludo-live-api"; else WORKER_NAME="ludo-live-api-staging"; fi
+          npx wrangler deploy --name "$WORKER_NAME" --var "ALLOWED_ORIGIN:$PAGES_ORIGIN"
 
   deploy-pages:
     if: ${{ inputs.deploy_pages }}
@@ -86,11 +105,14 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Build Pages site
         env:
-          VITE_API_BASE_URL: ${{ secrets.LUDO_LIVE_WORKER_API_URL }}
-          VITE_REALTIME_URL: ${{ secrets.LUDO_LIVE_REALTIME_URL }}
+          VITE_API_BASE_URL: ${{ inputs.target == 'production' && secrets.LUDO_LIVE_WORKER_API_URL || secrets.LUDO_STAGING_WORKER_API_URL }}
+          VITE_REALTIME_URL: ${{ inputs.target == 'production' && secrets.LUDO_LIVE_REALTIME_URL || secrets.LUDO_STAGING_REALTIME_URL }}
         run: npm run build
       - name: Deploy Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler pages deploy dist --project-name=ludo-live --branch=main
+          TARGET: ${{ inputs.target }}
+        run: |
+          if [[ "$TARGET" == "production" ]]; then PAGES_PROJECT="ludo-live"; else PAGES_PROJECT="ludo-live-staging"; fi
+          npx wrangler pages deploy dist --project-name="$PAGES_PROJECT" --branch=main
