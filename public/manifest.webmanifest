@@ -1,0 +1,23 @@
+{
+  "name": "Ludo Live",
+  "short_name": "Ludo Live",
+  "description": "Play Ludo with friends and compete together.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d0b16",
+  "theme_color": "#0d0b16",
+  "categories": [
+    "games",
+    "social"
+  ],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
