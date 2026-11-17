@@ -392,7 +392,6 @@ export default {
     const url = new URL(request.url), origin = env.ALLOWED_ORIGIN || request.headers.get("origin") || "*";
     if (request.method === "OPTIONS") return withCors(new Response(null, { status: 204 }), origin);
     try {
-      if (url.pathname === "/connect") { const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global")); return hub.fetch("https://hub/connect" + url.search); }
       if (url.pathname === "/api/_healthcheck") return withCors(json({ message: "Success", platform: "cloudflare-workers" }), origin);
       if (url.pathname === "/connect") {
         const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
@@ -423,6 +422,15 @@ export default {
         return withCors(await stub.fetch("https://room/create", { method: "POST", body: JSON.stringify(room) }), origin);
       }
       const parts = url.pathname.split("/").filter(Boolean);
+      if (request.method === "GET" && parts[0] === "api" && parts[1] === "rooms" && parts[2] && parts[3] === "replay") {
+        const roomCode = parts[2].toUpperCase();
+        const replayStub = env.LUDO_ROOMS.get(env.LUDO_ROOMS.idFromName(roomCode));
+        const roomRes = await replayStub.fetch("https://room/read");
+        const payload = await roomRes.json<any>();
+        const room = payload.room as Room | undefined;
+        if (!room || room.status !== "finished") return withCors(fail("Replay is available after a match has finished.", 404), origin);
+        return withCors(json({ roomCode, completedAt: room.lastActivity, gameMode: room.gameMode, players: room.players, winnerId: room.state.winner, winnerTeam: room.state.winnerTeam || null, events: room.replaySnapshots || [] }), origin);
+      }
       if (parts[0] === "api" && parts[1] === "rooms" && parts[2]) {
         const code = parts[2].toUpperCase();
         if (!/^[A-Z0-9]{6}$/.test(code)) return withCors(fail("Enter a valid 6-character room code."), origin);
@@ -432,7 +440,6 @@ export default {
         if (request.method === "GET" && suffix === "spectate") return withCors(await stub.fetch("https://room/read?spectate=1"), origin);
         if (request.method === "POST") return withCors(await stub.fetch("https://room/action", { method: "POST", body: JSON.stringify({ action: suffix, input: await request.json() }) }), origin);
       }
-      if (request.method === "GET" && parts[0] === "api" && parts[1] === "rooms" && parts[2] && parts[3] === "replay") { const roomCode = parts[2].toUpperCase(); const roomRes = await stub.fetch("https://room/read"); const payload = await roomRes.json<any>(); const room = payload.room as Room | undefined; if (!room || room.status !== "finished") return withCors(fail("Replay is available after a match has finished.", 404), origin); return withCors(json({ roomCode, completedAt: room.lastActivity, gameMode: room.gameMode, players: room.players, winnerId: room.state.winner, winnerTeam: room.state.winnerTeam || null, events: room.replaySnapshots || [] }), origin); }
       if (url.pathname.startsWith("/api/matchmaking/")) {
         const action = url.pathname.split("/").pop();
         if (!["join", "status", "cancel"].includes(action || "") || request.method !== "POST") return withCors(fail("Not found.", 404), origin);
