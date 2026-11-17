@@ -26,9 +26,9 @@ function createConnection(): RealtimeConnection {
   const connectionId = makeConnectionId();
   const explicitEndpoint = (import.meta.env.VITE_REALTIME_URL || '').trim();
   const apiOrigin = (import.meta.env.VITE_API_BASE_URL || '').trim();
-  const endpoint = explicitEndpoint || (apiOrigin
-    ? apiOrigin.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:').replace(/\\/$/, '') + '/connect'
-    : '');
+  let normalizedApiOrigin = apiOrigin.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
+  while (normalizedApiOrigin.endsWith('/')) normalizedApiOrigin = normalizedApiOrigin.slice(0, -1);
+  const endpoint = explicitEndpoint || (normalizedApiOrigin ? normalizedApiOrigin + '/connect' : '');
   const messages: Array<(message: RealtimeMessage) => void> = [];
   const opens: Array<() => void> = [];
   const closes: Array<() => void> = [];
