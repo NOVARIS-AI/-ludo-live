@@ -598,6 +598,10 @@ export default {
         const payload = await verified.json<any>();
         authenticatedUser = payload.user;
         if (!authenticatedUser?.id) return withCors(fail("Authentication required.", 401), origin);
+        const playerRoute = url.pathname.match(/^\/api\/players\/([^/]+)\//);
+        if (playerRoute && decodeURIComponent(playerRoute[1]) !== authenticatedUser.id) {
+          return withCors(fail("You can only access your own player profile.", 403), origin);
+        }
       }
       if (url.pathname === "/connect") {
         if (!requestOrigin || !allowedOrigins.includes(requestOrigin)) return fail("Realtime origin is not allowed.", 403);
@@ -665,7 +669,7 @@ export default {
         if (request.method !== "GET") {
           const rawBody = await request.json<any>().catch(() => ({}));
           dataBody = { ...rawBody };
-          for (const key of ["playerId", "requesterId", "fromPlayerId", "reporterId", "blockerId", "userId"]) {
+          for (const key of ["playerId", "requesterId", "fromPlayerId", "reporterId", "blockerId", "userId", "hostId", "creatorId", "ownerId", "player_id", "user_id"]) {
             if (key in dataBody) dataBody[key] = authenticatedUser!.id;
           }
         }
