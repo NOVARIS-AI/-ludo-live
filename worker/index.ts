@@ -443,7 +443,7 @@ export class AppData {
         item.status=input.accept===true?"accepted":"declined";item.updatedAt=Date.now();await this.save("friends",friends);return json({friendship:item});
       }
       if (path.startsWith("/progression/") && method === "GET") {
-        const playerId=decodeURIComponent(path.slice(12)), results=await this.list<StoredResult>("results"), matches=results.filter(m=>m.players.some(p=>p.id===playerId));
+        const playerId=decodeURIComponent(path.slice(13)), results=await this.list<StoredResult>("results"), matches=results.filter(m=>m.players.some(p=>p.id===playerId));
         const wins=matches.filter(m=>m.winnerId===playerId||!!m.winnerTeam&&m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam)).length;
         const cosmetics=[{id:"classic",name:"Classic",winsRequired:0},{id:"ruby-trail",name:"Ruby trail",winsRequired:3},{id:"gold-dice",name:"Golden dice",winsRequired:10},{id:"champion-aura",name:"Champion aura",winsRequired:25}];
         const profiles=await this.list<any>("profiles"),profile=profiles.find(p=>p.id===playerId),unlocked=cosmetics.filter(c=>wins>=c.winsRequired);
