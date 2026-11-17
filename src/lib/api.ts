@@ -15,10 +15,10 @@ export class ApiError extends Error {
   }
 }
 
-let authToken = '';
-export function setAuthToken(token:string) { authToken=token; }
+let authToken = localStorage.getItem('ludo-live-auth-token') || '';
 export function setAuthToken(token: string | null) {
-  if (token) localStorage.setItem('ludo-live-auth-token', token);
+  authToken = token || '';
+  if (authToken) localStorage.setItem('ludo-live-auth-token', authToken);
   else localStorage.removeItem('ludo-live-auth-token');
 }
 
