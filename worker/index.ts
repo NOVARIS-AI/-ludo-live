@@ -451,7 +451,7 @@ export class AppData {
         return json({playerId,matchesPlayed:matches.length,wins,xp,coins:matches.length*20+wins*30,level:Math.floor(xp/250)+1,unlockedCosmetics:unlocked,cosmetics,equippedCosmetic:unlocked.some(c=>c.id===profile?.equippedCosmetic)?profile.equippedCosmetic:"classic"});
       }
       if (path.startsWith("/cosmetics/") && method === "POST") {
-        const cosmeticId=decodeURIComponent(path.slice(10)),input=await request.json<any>(),playerId=clean(input.playerId),results=await this.list<StoredResult>("results"),matches=results.filter(m=>m.players.some(p=>p.id===playerId)),wins=matches.filter(m=>m.winnerId===playerId||!!m.winnerTeam&&m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam)).length;
+        const cosmeticId=decodeURIComponent(path.split("/")[2] || ""),input=await request.json<any>(),playerId=clean(input.playerId),results=await this.list<StoredResult>("results"),matches=results.filter(m=>m.players.some(p=>p.id===playerId)),wins=matches.filter(m=>m.winnerId===playerId||!!m.winnerTeam&&m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam)).length;
         const required:Record<string,number>={classic:0,"ruby-trail":3,"gold-dice":10,"champion-aura":25};
         if(!playerId||required[cosmeticId]===undefined||wins<required[cosmeticId])return fail("Play more matches to unlock that cosmetic.",403);
         const profiles=await this.list<any>("profiles"),profile=profiles.find(p=>p.id===playerId);
