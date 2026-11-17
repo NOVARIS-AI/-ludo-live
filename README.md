@@ -27,7 +27,7 @@ The UI styles and layout have been added in source, but device-by-device visual 
 5. Configure a durable guest/player identity and server-side authorization before public release. Current player IDs are client-generated and are not authenticated; CORS is not authentication.
 6. Verify room creation/join/turns, quick matchmaking, reconnect behavior, tournaments, chat, moderation and replay with at least two real devices before switching away from the existing AppDeploy app.
 
-The CI workflow builds the frontend, runs TypeScript checks, dry-runs the Worker bundle and retains the Pages `dist/` artifact. It does not deploy automatically.
+The CI workflow builds the frontend, runs TypeScript checks, dry-runs the Worker bundle and retains the Pages `dist/` artifact. It does not deploy automatically. A separate manual workflow is prepared in `.github/workflows/cloudflare-deploy.yml`; it requires Cloudflare secrets and an explicit `LUDO_AUTH_READY=true` release gate. See `CLOUDFLARE_DEPLOYMENT.md` for the setup and rollout sequence.
 
 ## Local development
 1. Install Node.js 22 or newer and run `npm install`.
