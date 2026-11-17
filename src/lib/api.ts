@@ -15,6 +15,8 @@ export class ApiError extends Error {
   }
 }
 
+let authToken = '';
+export function setAuthToken(token:string) { authToken=token; }
 const configuredBase = (import.meta.env.VITE_API_BASE_URL || '').trim();
 let API_BASE = configuredBase;
 while (API_BASE.endsWith('/')) API_BASE = API_BASE.slice(0, -1);
@@ -28,9 +30,11 @@ async function request<T>(
   const response = await fetch(`${API_BASE}${normalizedPath}`, {
     method,
     credentials: 'same-origin',
-    headers: body === undefined
-      ? { Accept: 'application/json' }
-      : { Accept: 'application/json', 'Content-Type': 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(authToken ? { Authorization: 'Bearer ' + authToken } : {}),
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 
