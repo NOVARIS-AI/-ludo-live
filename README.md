@@ -27,3 +27,6 @@ The UI styles and layout have been added in source, but device-by-device visual 
 
 ## Cloudflare resources
 Wrangler declares SQLite-backed Durable Object classes `LudoRoom`, `RealtimeHub`, `MatchmakingLobby`, and `AppData`. Deployment requires Cloudflare account authorization. No deployment has been performed.
+
+## Browser security configuration
+The Worker intentionally does not use wildcard CORS. The checked-in Wrangler default permits only local Vite development at `http://localhost:5173`. Before publishing the Pages frontend, set the Worker `ALLOWED_ORIGIN` variable to the exact deployed Pages origin (comma-separated exact origins only if multiple frontends are intentionally supported). WebSocket connections enforce the same allowlist. A production deployment with the local-only default will correctly reject the Pages site until this value is changed.
