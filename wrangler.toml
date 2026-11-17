@@ -16,3 +16,11 @@ class_name = "RealtimeHub"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["LudoRoom", "RealtimeHub"]
+
+[[durable_objects.bindings]]
+name = "MATCHMAKING"
+class_name = "MatchmakingLobby"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["MatchmakingLobby"]
