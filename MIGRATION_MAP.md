@@ -1,18 +1,23 @@
 # Migration status
 
-## Implemented
-- Frontend HTTP and WebSocket adapters no longer depend on the AppDeploy client.
-- Cloudflare Worker entry point with CORS and health-check routes.
-- Per-room Durable Object storage and serialized room actions.
-- Realtime Durable Object with WebSocket upgrade, subscriptions and entity update broadcasts.
-- Room create/join/start/roll/move/pass/bot-turn/chat/private-chat/call-join/call-leave/call-signal/leave and spectate routes.
+## Implemented in source
+- Frontend HTTP and WebSocket adapters; no remaining `@appdeploy/client` imports in the frontend.
+- Landscape-first responsive game HUD and responsive board/panels styling.
+- Cloudflare Worker entry point, CORS and health-check.
+- `LudoRoom`: per-room storage, serialized room actions, Ludo rules, bot turns, chat, call signaling, leave and spectate.
+- `RealtimeHub`: WebSocket upgrade, subscriptions and entity-update broadcasts.
+- `MatchmakingLobby`: quick 1v1 queue, status, cancel and 90-second expiry.
+- `AppData`: tournament CRUD/start/result reporting, leaderboard, player summaries, blocked-player list, reports, and disconnected integration manifest.
+- Finished match result persistence and bounded room replay snapshots.
 
-## Not yet migrated
-- Atomic quick-match lobby and matchmaking status/cancel.
-- D1-backed tournaments, global leaderboard, player profiles, progression, cosmetics, friends, reports, blocks, match result persistence and replay history.
-- Authentication, identity verification, rate limits, anti-abuse and full moderation.
-- TURN relay for reliable voice/video calls.
-- Full gameplay UI adaptation and end-to-end multiplayer tests.
+## Still required before public production
+- Authenticated player identity and authorization for every room/data action.
+- Rate limits, anti-abuse controls, report review/moderation workflow and exact Pages-origin CORS.
+- TURN relay for dependable voice/video across restrictive networks.
+- Friends, cosmetics/progression, season leaderboard and richer persistent match-history UX.
+- End-to-end tests for room lifecycle, matchmaking races, reconnects, replay integrity, team rules, chat and hangout.
+- Visual QA on real Android phones, tablets and desktop; adjust board sizing and HUD after screenshots.
+- Cloudflare Pages/Worker configuration, environment values and a verified deployment.
 
 ## Production gate
-Do not switch the live AppDeploy app until the Worker and frontend pass build, security and multiplayer tests. Configure an exact allowed origin, authenticate player identities, protect room actions, and set real Cloudflare environment values before public deployment. No production deployment has been made.
+Keep the existing AppDeploy app live until the replacement passes the build, Worker dry-run, security review and multiplayer/device tests. No Cloudflare deployment has been made. AppDeploy remains untouched.
