@@ -49,6 +49,8 @@ function createConnection(): RealtimeConnection {
     try {
       const url = new URL(endpoint);
       url.searchParams.set('connection_id', connectionId);
+      const sessionToken = localStorage.getItem('ludo-live-auth-token');
+      if (sessionToken) url.searchParams.set('token', sessionToken);
       socket = new WebSocket(url.toString());
 
       socket.addEventListener('open', () => {
