@@ -330,3 +330,21 @@ a {
   .ludo-board{width:min(100%,calc(100dvh - 135px))}
   .dice-button{min-height:34px}
 }
+
+
+/* Secure player account entry */
+.auth-screen{min-height:100dvh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 20% 10%,rgba(101,72,190,.24),transparent 42%),radial-gradient(ellipse at 85% 85%,rgba(26,164,157,.16),transparent 38%),#090b14;color:#f7f7fb}
+.auth-card{width:min(100%,440px);display:flex;flex-direction:column;gap:15px;padding:clamp(24px,6vw,38px);border:1px solid rgba(255,255,255,.13);border-radius:25px;background:rgba(18,22,36,.88);box-shadow:0 24px 90px rgba(0,0,0,.42);backdrop-filter:blur(22px)}
+.auth-brand{font-size:19px;font-weight:900;letter-spacing:.12em}.auth-brand b{color:#a78bfa}
+.auth-kicker{font-size:10px;font-weight:800;letter-spacing:.18em;color:#a78bfa}
+.auth-card h1{margin:0;font-size:clamp(27px,7vw,36px);line-height:1.08}.auth-card p{margin:0;color:#aeb4c8;line-height:1.55;font-size:14px}
+.auth-card label{display:grid;gap:7px;font-size:12px;font-weight:700;color:#dce0ed}
+.auth-card input{width:100%;min-height:48px;padding:0 14px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:#0d1120;color:#fff;outline:none}
+.auth-card input:focus{border-color:#a78bfa;box-shadow:0 0 0 3px rgba(167,139,250,.14)}
+.auth-card>small{font-size:11px;color:#8e96ad;line-height:1.5}
+.auth-submit{min-height:49px;border:0;border-radius:13px;background:linear-gradient(100deg,#8b5cf6,#6366f1);color:white;font-weight:850;cursor:pointer}
+.auth-submit:disabled{opacity:.6;cursor:wait}.auth-switch{border:0;background:transparent;color:#c4b5fd;font-weight:700;padding:9px;cursor:pointer}
+.auth-error{padding:11px 13px;border-radius:10px;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#fecaca;font-size:12px}
+.account-chip{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:8px 11px;border-radius:99px;background:rgba(167,139,250,.12);color:#d8ccff;font-size:11px;font-weight:750}
+.account-signout{border:1px solid rgba(255,255,255,.14);border-radius:9px;background:rgba(255,255,255,.04);color:#c7cada;padding:8px 10px;font-size:10px;font-weight:800;cursor:pointer}
+@media(max-width:600px){.account-chip{display:none}.auth-card{border-radius:20px}}
