@@ -1,29 +1,23 @@
 # Ludo Live — migration source archive
 
-This repository contains the last successful Ludo Live AppDeploy source snapshot (v13, snapshot 1794928744639) copied for migration planning.
+This repository contains the last successful Ludo Live AppDeploy source snapshot (v13, snapshot `1794928744639`) and the incremental portability work.
 
-## Important status
+## Current status
 
-- This is a source backup, **not yet a standalone deployable migration**.
-- The original frontend imports `@appdeploy/client`; the backend imports `@appdeploy/sdk`. Those platform-specific dependencies and their database/realtime services still need to be replaced.
-- Do not deploy this snapshot directly to Cloudflare Pages/Workers.
-- The existing AppDeploy production app remains the live version while migration work is prepared and tested.
-- No API keys, environment values, user records, or secrets are included in this archive.
-- Future VELTRONIX NEXUS integrations remain disconnected; only the app's integration manifest foundation is retained.
+- The original v13 source is preserved in Git history.
+- Frontend HTTP calls now go through a portable fetch client in `src/lib/api.ts`.
+- The AppDeploy WebSocket client and all AppDeploy backend SDK/database dependencies remain. This repository is **not yet a standalone Cloudflare deployment**.
+- The AppDeploy production app remains the live version while migration work is prepared and tested.
+- No API keys, environment values, user records, or secrets are included.
+- Future VELTRONIX NEXUS integrations remain disconnected.
 
-## Source baseline
+## Local API configuration
 
-- Snapshot: v13
-- AppDeploy app id: `ludo-live-36f4jn`
-- Captured files: 17
-- Source characters: 54889
+- Same-origin API: leave `VITE_API_BASE_URL` unset.
+- Separate API host: set `VITE_API_BASE_URL` to the Worker API origin. The Worker must enable CORS for the Pages origin.
 
-## Planned migration stages
+## Migration notes
 
-1. Replace AppDeploy client API calls with a portable typed HTTP client.
-2. Port backend routes and data operations to Cloudflare Workers + a durable database/realtime approach.
-3. Preserve room state, matchmaking, tournaments, player features, chat and spectator behavior.
-4. Correct the immersive responsive gameplay UI (landscape-first mobile, desktop adaptive).
-5. Add automated checks and validate a preview before any production cutover.
+See [MIGRATION_MAP.md](./MIGRATION_MAP.md) for the route inventory, data collections, known frontend/backend mismatch and backend migration constraints.
 
 Never commit secrets or production environment values. Use local `.env` files excluded by `.gitignore` and Cloudflare secret bindings for deployment.
