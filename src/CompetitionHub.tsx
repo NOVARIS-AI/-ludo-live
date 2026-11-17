@@ -13,12 +13,14 @@ type Leader = { playerId: string; name: string; wins: number; matches: number };
 type SpectatorRoom = { code: string; status: string; players: Array<{ id: string; name: string; color: string }>; state: { turnMessage: string; winner: string | null; currentTurnIndex: number } };
 
 export default function CompetitionHub({ playerId, playerName, onClose }: { playerId: string; playerName: string; onClose: () => void }) {
-  const [tab, setTab] = useState<'tournaments' | 'rankings' | 'profile' | 'watch' | 'connect'>('tournaments');
+  const [tab, setTab] = useState<'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'connect'>('tournaments');
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [leaders, setLeaders] = useState<Leader[]>([]);
   const [summary, setSummary] = useState<{ matchesPlayed: number; wins: number; losses: number; recentMatches: Array<{ roomCode: string; result: string; players: string[] }> } | null>(null);
   const [spectatorCode, setSpectatorCode] = useState('');
   const [spectatorRoom, setSpectatorRoom] = useState<SpectatorRoom | null>(null);
+  const [replayCode, setReplayCode] = useState('');
+  const [replayData, setReplayData] = useState<any>(null);
   const [tournamentName, setTournamentName] = useState('');
   const [resultRoomCode, setResultRoomCode] = useState('');
   const [maxPlayers, setMaxPlayers] = useState(8);
@@ -71,6 +73,15 @@ export default function CompetitionHub({ playerId, playerName, onClose }: { play
       setResultRoomCode('');
     }, 'Tournament result recorded and bracket updated.');
   }
+  async function loadReplay() {
+    setBusy(true); setMessage(''); setReplayData(null);
+    try {
+      const response = await api.get('/api/rooms/' + replayCode.toUpperCase() + '/replay');
+      setReplayData(response.data);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Replay not found.'); }
+    finally { setBusy(false); }
+  }
+
   async function watchMatch() {
     setBusy(true); setMessage('');
     try {
@@ -89,7 +100,7 @@ export default function CompetitionHub({ playerId, playerName, onClose }: { play
       <div className="competition-tabs">
         {([
           ['tournaments', 'Tournaments', Trophy], ['rankings', 'Rankings', Award],
-          ['profile', 'My record', Users], ['watch', 'Watch match', Eye], ['connect', 'Connect', Plug],
+          ['profile', 'My record', Users], ['watch', 'Watch match', Eye], ['replay', 'Replay', RefreshCw], ['connect', 'Connect', Plug],
         ] as const).map(([key, label, Icon]) => <button key={key} className={tab === key ? 'selected' : ''} onClick={() => setTab(key)}><Icon size={15}/>{label}</button>)}
       </div>
       {message ? <div className="competition-message">{message}</div> : null}
@@ -119,6 +130,9 @@ export default function CompetitionHub({ playerId, playerName, onClose }: { play
       {tab === 'profile' ? <div className="competition-card"><span className="mini-label">PLAYER CARD</span><h3>{playerName}</h3><div className="stat-grid"><div><b>{summary?.matchesPlayed ?? 0}</b><small>Matches</small></div><div><b>{summary?.wins ?? 0}</b><small>Wins</small></div><div><b>{summary?.losses ?? 0}</b><small>Other finishes</small></div></div><h4>Recent matches</h4>{summary?.recentMatches?.length ? summary.recentMatches.map(match => <div className="history-row" key={match.roomCode}><b>{match.result === 'win' ? 'Victory' : 'Match played'}</b><span>Room {match.roomCode}</span><small>{match.players.join(' · ')}</small></div>) : <div className="competition-empty">Your completed matches will show here.</div>}</div> : null}
       {tab === 'watch' ? <div className="competition-card"><span className="mini-label">SPECTATOR MODE</span><h3>Watch a live match</h3><p>Enter a room code to follow the public match state. Spectators cannot move tokens or send messages.</p><div className="spectator-search"><input className="text-field" maxLength={6} value={spectatorCode} onChange={event => setSpectatorCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))} placeholder="ROOM CODE"/><button className="primary-button" disabled={busy || spectatorCode.length !== 6} onClick={() => void watchMatch()}>Watch <Eye size={16}/></button></div>
         {spectatorRoom ? <div className="spectator-view"><div className="competition-card-title"><b>Room {spectatorRoom.code}</b><span className="status-tag">{spectatorRoom.status}</span></div><p>{spectatorRoom.state.turnMessage}</p><div className="spectator-players">{spectatorRoom.players.map(p => <span key={p.id} className={'avatar-pill avatar-' + p.color}>{p.name}</span>)}</div><small>Live public view · refreshes automatically · read-only</small></div> : null}
+      </div> : null}
+      {tab === 'replay' ? <div className="competition-card replay-card"><span className="mini-label">MATCH REPLAY</span><h3>Review a completed game</h3><p>Enter the six-character room code to review saved turns and match events. Replay data is read-only.</p><div className="spectator-search"><input className="text-field" maxLength={6} value={replayCode} onChange={event => setReplayCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))} placeholder="ROOM CODE"/><button className="primary-button" disabled={busy || replayCode.length !== 6} onClick={() => void loadReplay()}>Load replay <RefreshCw size={15}/></button></div>
+        {replayData ? <div className="replay-summary"><div className="competition-card-title"><b>Room {replayData.roomCode}</b><span className="status-tag">COMPLETED</span></div><p>Winner: {replayData.players?.find((player:any) => player.id === replayData.winnerId)?.name || (replayData.winnerTeam ? 'Team ' + replayData.winnerTeam : 'Unknown')}</p><div className="replay-events">{(replayData.events || []).map((event:any) => <div className="replay-event" key={event.version}><span className="replay-event-number">{event.version}</span><div><b>{event.turnMessage}</b><small>{new Date(event.at).toLocaleString()} · Turn {Number(event.currentTurnIndex) + 1}{event.dice ? ' · Dice ' + event.dice : ''}</small></div></div>)}</div>{!replayData.events?.length ? <div className="competition-empty">No turn snapshots were saved for this match.</div> : null}</div> : null}
       </div> : null}
       {tab === 'connect' ? <div className="competition-card"><span className="mini-label">VELTRONIX NEXUS • PLUGIN FOUNDATION</span><h3><Plug size={20}/> Ready for future integrations</h3><p>Ludo Live remains independent. These versioned capabilities prepare approved connections later; no external app is connected today.</p><div className="integration-status"><ShieldCheck size={18}/><span><b>Consent-first API foundation</b><small>Only approved summaries and public tournament data are planned for sharing.</small></span></div><div className="scope-list">{(manifest?.scopes || ['match.summary.read','tournament.summary.read','player.stats.read']).map((scope: string) => <span key={scope}>{scope}</span>)}</div><div className="privacy-note"><b>Never shared by default</b><small>Private messages, camera streams, microphone streams, device contacts and credentials remain outside the integration interface.</small></div><small>API version {manifest?.app?.integrationApiVersion || '1'} · Connected apps: 0</small></div> : null}
       <div className="competition-foot"><span><Gamepad2 size={14}/> Free-to-enter community play</span><span>Fair play • No wagers</span></div>
