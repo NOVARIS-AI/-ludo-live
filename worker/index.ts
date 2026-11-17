@@ -649,7 +649,11 @@ export default {
         const stub = env.LUDO_ROOMS.get(env.LUDO_ROOMS.idFromName(code));
         if (request.method === "GET" && !suffix) return withCors(await stub.fetch("https://room/read"), origin);
         if (request.method === "GET" && suffix === "spectate") return withCors(await stub.fetch("https://room/read?spectate=1"), origin);
-        if (request.method === "POST") const actionInput = await request.json<any>();\n        actionInput.playerId = authenticatedUser!.id;\n        return withCors(await stub.fetch("https://room/action", { method: "POST", body: JSON.stringify({ action: suffix, input: actionInput }) }), origin);
+        if (request.method === "POST") {
+          const actionInput = await request.json<any>();
+          actionInput.playerId = authenticatedUser!.id;
+          return withCors(await stub.fetch("https://room/action", { method: "POST", body: JSON.stringify({ action: suffix, input: actionInput }) }), origin);
+        }
       }
 
       if (url.pathname.startsWith("/api/auth/") || url.pathname.startsWith("/api/tournaments") || url.pathname === "/api/leaderboard" || url.pathname === "/api/safety/report" || url.pathname === "/api/safety/block" || url.pathname === "/api/integrations/manifest" || url.pathname === "/api/friends/request" || url.pathname === "/api/friends/respond" || url.pathname === "/api/season/leaderboard" || url.pathname.startsWith("/api/cosmetics/") || /^\/api\/players\/[^/]+\/(summary|blocked|progression|friends)$/.test(url.pathname)) {
