@@ -1,10 +1,7 @@
 /**
- * Small fetch-based API client used by the Ludo Live browser app.
- *
- * Set VITE_API_BASE_URL when the API is hosted separately from the Pages app.
- * Leave it empty for a same-origin /api deployment.
+ * Fetch-based API adapter. Empty VITE_API_BASE_URL means same-origin /api.
+ * For a separate Worker, set VITE_API_BASE_URL to its HTTPS origin.
  */
-
 type ApiEnvelope<T> = { data: T };
 type ErrorPayload = { error?: string; message?: string; [key: string]: unknown };
 
@@ -19,7 +16,8 @@ export class ApiError extends Error {
 }
 
 const configuredBase = (import.meta.env.VITE_API_BASE_URL || '').trim();
-const API_BASE = configuredBase.replace(/\\/+$/, '');
+let API_BASE = configuredBase;
+while (API_BASE.endsWith('/')) API_BASE = API_BASE.slice(0, -1);
 
 async function request<T>(
   method: 'GET' | 'POST',
@@ -29,7 +27,7 @@ async function request<T>(
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const response = await fetch(`${API_BASE}${normalizedPath}`, {
     method,
-    credentials: 'include',
+    credentials: 'same-origin',
     headers: body === undefined
       ? { Accept: 'application/json' }
       : { Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -47,7 +45,7 @@ async function request<T>(
   }
 
   if (!response.ok) {
-    const payload =
+    const payload: ErrorPayload =
       data && typeof data === 'object'
         ? (data as ErrorPayload)
         : { message: String(data || response.statusText) };
