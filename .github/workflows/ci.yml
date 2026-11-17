@@ -18,5 +18,7 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Build frontend
         run: npm run build
+      - name: Type-check frontend
+        run: npm run typecheck
       - name: Validate Worker bundle without deploying
         run: npx wrangler deploy --dry-run
