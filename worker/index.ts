@@ -249,6 +249,12 @@ export default {
     if (request.method === "OPTIONS") return withCors(new Response(null, { status: 204 }), origin);
     try {
       if (url.pathname === "/api/_healthcheck") return withCors(json({ message: "Success", platform: "cloudflare-workers" }), origin);
+      if (url.pathname === "/connect") {
+        const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
+        const target = new URL("https://hub/connect");
+        target.searchParams.set("connection_id", url.searchParams.get("connection_id") || "");
+        return hub.fetch(new Request(target, request));
+      }
       if (url.pathname === "/api/subscriptions" || url.pathname === "/api/subscriptions/remove") {
         const body = await request.json();
         const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
