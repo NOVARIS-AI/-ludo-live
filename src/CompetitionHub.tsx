@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '@appdeploy/client';
+import { api } from './lib/api';
 import { ArrowLeft, Award, Eye, Gamepad2, Plug, Plus, RefreshCw, ShieldCheck, Trophy, Users } from 'lucide-react';
 
 type Tournament = {
