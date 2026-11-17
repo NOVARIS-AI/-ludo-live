@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ws } from './lib/realtime';
 import { api, setAuthToken } from './lib/api';
 import CompetitionHub from './CompetitionHub';
@@ -143,20 +143,6 @@ const HOME_LANES: Record<Color, Point[]> = {
 };
 const DICE_FACES = ['–', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
-function playerIdForDevice(): string {
-  const key = 'ludo-live-player-id';
-  let id = localStorage.getItem(key);
-  if (!id) {
-    id =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : 'guest-' +
-          Math.random().toString(36).slice(2) +
-          Date.now().toString(36);
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
 
 function getTokenPoint(
   color: Color,
@@ -446,7 +432,7 @@ export default function App() {
     }).catch(() => setAuthToken(null)).finally(() => setAuthLoading(false));
   }, []);
 
-  async function submitAuth(event: React.FormEvent<HTMLFormElement>) {
+  async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setAuthBusy(true); setAuthError('');
     try {
       const endpoint = authMode === 'register' ? '/api/auth/register' : '/api/auth/login';
