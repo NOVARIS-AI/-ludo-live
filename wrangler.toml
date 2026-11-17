@@ -1,0 +1,18 @@
+name = "ludo-live-api"
+main = "worker/index.ts"
+compatibility_date = "2026-11-17"
+
+[vars]
+ALLOWED_ORIGIN = "*"
+
+[[durable_objects.bindings]]
+name = "LUDO_ROOMS"
+class_name = "LudoRoom"
+
+[[durable_objects.bindings]]
+name = "REALTIME_HUB"
+class_name = "RealtimeHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LudoRoom", "RealtimeHub"]

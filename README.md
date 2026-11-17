@@ -1,20 +1,18 @@
 # Ludo Live — migration source archive
 
-This repository preserves the last successful Ludo Live AppDeploy source snapshot (v13, `1794928744639`) and the incremental portability work.
+The repository contains the last successful AppDeploy source snapshot and the Cloudflare migration.
 
-## Current status
+## Cloudflare migration stage
+- `worker/index.ts` provides room Durable Objects and a realtime WebSocket hub.
+- Implemented API routes: room create, computer room create, room fetch, spectate, join, start, roll, move, pass, chat, call join/leave and leave; plus realtime subscribe/unsubscribe.
+- Matchmaking, tournaments, leaderboard, friends, progression, cosmetics, report/block moderation and replay persistence are not yet migrated.
+- The original AppDeploy backend remains as historical source. Production has not been switched.
 
-- Frontend HTTP calls use `src/lib/api.ts`.
-- Frontend realtime connections use `src/lib/realtime.ts`.
-- No AppDeploy client import remains in the frontend.
-- The backend still imports `@appdeploy/sdk` and still depends on AppDeploy database services. The realtime adapter also needs its Cloudflare Worker endpoint.
-- This is **not yet a standalone Cloudflare deployment**. The existing AppDeploy production app remains live while the replacement is prepared and tested.
-- No API keys, environment values, user records or secrets are included.
-- Future VELTRONIX NEXUS integrations remain disconnected.
+## Local setup
+- `npm install`
+- `npm run dev` for Vite
+- `npm run dev:worker` for Wrangler
+- Set `VITE_API_BASE_URL` to the Worker HTTP origin and `VITE_REALTIME_URL` to the Worker WebSocket `/connect` endpoint.
+- Configure a specific Pages origin instead of the wildcard CORS value before deployment.
 
-## Environment
-
-- `VITE_API_BASE_URL`: optional Worker API origin; empty means same-origin `/api`.
-- `VITE_REALTIME_URL`: Worker WebSocket URL, for example a secure `wss://` endpoint. Realtime stays offline until this is configured.
-
-See [MIGRATION_MAP.md](./MIGRATION_MAP.md) for routes, data collections, migration constraints and known source mismatches. Never commit secrets or production environment values.
+This is an in-progress migration, not a production-ready deployment. Authentication, rate limiting, abuse protection, and the remaining D1-backed features must be completed and tested first. Do not commit secrets or user records. Integrations remain disconnected.
