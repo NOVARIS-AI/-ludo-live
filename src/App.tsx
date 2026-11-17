@@ -1204,6 +1204,28 @@ export default function App() {
           (message.playerId === chatRecipientId && message.recipientId === playerId)
         ));
 
+  if (authLoading) return <main className="auth-screen"><div className="auth-card"><div className="auth-brand">LUDO <b>LIVE</b></div><p>Checking your player session…</p></div></main>;
+  if (!authUser) {
+    return (
+      <main className="auth-screen">
+        <form className="auth-card" onSubmit={submitAuth}>
+          <div className="auth-brand">LUDO <b>LIVE</b></div>
+          <span className="auth-kicker">YOUR PLAYER IDENTITY</span>
+          <h1>{authMode === 'login' ? 'Welcome back' : 'Create your player account'}</h1>
+          <p>Sign in to keep your player profile, progress and matches connected across devices.</p>
+          {authMode === 'register' ? <label>Display name<input required minLength={2} maxLength={24} value={authName} onChange={event => setAuthName(event.target.value)} placeholder="Your player name" /></label> : null}
+          <label>Email address<input required type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>
+          <label>Password<input required type="password" minLength={10} autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={event => setAuthPassword(event.target.value)} placeholder={authMode === 'register' ? 'At least 10 characters' : 'Your password'} /></label>
+          {authMode === 'register' ? <small>Use at least 10 characters, with letters and numbers.</small> : null}
+          {authError ? <div className="auth-error" role="alert">{authError}</div> : null}
+          <button className="auth-submit" type="submit" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'login' ? 'Sign in' : 'Create account'}</button>
+          <button className="auth-switch" type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}>{authMode === 'login' ? 'New to Ludo Live? Create an account' : 'Already have an account? Sign in'}</button>
+          <small className="auth-privacy">Passwords are hashed on the server. Keep your sign-in details private.</small>
+        </form>
+      </main>
+    );
+  }
+
   if (!room || !me) {
     return (
       <main className="app-root landing-root">
@@ -1223,6 +1245,8 @@ export default function App() {
             <span className="online-pill">
               <i /> MULTIPLAYER ONLINE
             </span>
+            <span className="account-chip">{authUser.name}</span>
+            <button className="account-signout" onClick={() => void signOut()}>SIGN OUT</button>
           </div>
         </header>
         {competitionOpen ? <CompetitionHub playerId={playerId} playerName={getPlayerName()} onClose={() => setCompetitionOpen(false)} /> : null}
@@ -1401,27 +1425,7 @@ export default function App() {
     );
   }
 
-  if (authLoading) return <main className="auth-screen"><div className="auth-card"><div className="auth-brand">LUDO <b>LIVE</b></div><p>Checking your player session…</p></div></main>;
-  if (!authUser) {
-    return (
-      <main className="auth-screen">
-        <form className="auth-card" onSubmit={submitAuth}>
-          <div className="auth-brand">LUDO <b>LIVE</b></div>
-          <span className="auth-kicker">YOUR PLAYER IDENTITY</span>
-          <h1>{authMode === 'login' ? 'Welcome back' : 'Create your player account'}</h1>
-          <p>Sign in to keep your player profile, progress and matches connected across devices.</p>
-          {authMode === 'register' ? <label>Display name<input required minLength={2} maxLength={24} value={authName} onChange={event => setAuthName(event.target.value)} placeholder="Your player name" /></label> : null}
-          <label>Email address<input required type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>
-          <label>Password<input required type="password" minLength={10} autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={event => setAuthPassword(event.target.value)} placeholder={authMode === 'register' ? 'At least 10 characters' : 'Your password'} /></label>
-          {authMode === 'register' ? <small>Use at least 10 characters, with letters and numbers.</small> : null}
-          {authError ? <div className="auth-error" role="alert">{authError}</div> : null}
-          <button className="auth-submit" type="submit" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'login' ? 'Sign in' : 'Create account'}</button>
-          <button className="auth-switch" type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}>{authMode === 'login' ? 'New to Ludo Live? Create an account' : 'Already have an account? Sign in'}</button>
-          <small className="auth-privacy">Passwords are hashed on the server. Keep your sign-in details private.</small>
-        </form>
-      </main>
-    );
-  }
+
 
   return (
     <main className="app-root game-root">
