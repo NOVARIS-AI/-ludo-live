@@ -36,9 +36,11 @@ jobs:
           PAGES_ORIGIN: ${{ secrets.LUDO_LIVE_PAGES_ORIGIN }}
           WORKER_API_URL: ${{ secrets.LUDO_LIVE_WORKER_API_URL }}
           REALTIME_URL: ${{ secrets.LUDO_LIVE_REALTIME_URL }}
+          AUTH_READY: ${{ secrets.LUDO_AUTH_READY }}
         run: |
           test -n "$CF_API_TOKEN" || (echo "::error::Missing CLOUDFLARE_API_TOKEN"; exit 1)
           test -n "$CF_ACCOUNT_ID" || (echo "::error::Missing CLOUDFLARE_ACCOUNT_ID"; exit 1)
+          test "$AUTH_READY" = "true" || (echo "::error::Set LUDO_AUTH_READY=true only after server-side authentication and authorization are implemented and tested"; exit 1)
           if [[ "${{ inputs.deploy_worker }}" == "true" || "${{ inputs.deploy_pages }}" == "true" ]]; then
             test -n "$PAGES_ORIGIN" || (echo "::error::Missing LUDO_LIVE_PAGES_ORIGIN"; exit 1)
           fi
@@ -56,7 +58,7 @@ jobs:
         run: npx wrangler deploy --dry-run
 
   deploy-worker:
-    if: ${{ inputs.deploy_worker }}
+    if: ${{ inputs.deploy_worker || inputs.deploy_pages }}
     needs: validate
     runs-on: ubuntu-latest
     steps:
