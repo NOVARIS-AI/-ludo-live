@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ws } from '@appdeploy/client';
+import { ws } from './lib/realtime';
 import { api } from './lib/api';
 import CompetitionHub from './CompetitionHub';
 import {

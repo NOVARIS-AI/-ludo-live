@@ -1,14 +1,14 @@
 # Ludo Live migration map
 
 Baseline: AppDeploy snapshot v13, `1794928744639`.
-Current source archive commit: `335edf0`.
+Original source archive commit: `335edf0`.
 
 ## Frontend platform coupling
 
-- `src/App.tsx` uses `@appdeploy/client` for HTTP requests and WebSocket connections.
-- HTTP request calls now use the local fetch-based adapter at `src/lib/api.ts`.
-- WebSocket lifecycle, room subscriptions, private-chat notifications and WebRTC signaling still use the AppDeploy realtime client. They are intentionally not stubbed or silently disabled in this stage.
-- `VITE_API_BASE_URL` is optional. Empty means same-origin `/api`; a separate Worker API needs this variable set to its HTTPS origin and must allow the Pages origin through CORS.
+- HTTP calls use the portable fetch adapter at `src/lib/api.ts`.
+- WebSocket calls use the browser adapter at `src/lib/realtime.ts`; no AppDeploy client import remains in the frontend.
+- Configure `VITE_API_BASE_URL` for a separate Worker API and `VITE_REALTIME_URL` for its WebSocket endpoint. Leave the API base empty only when the API shares the Pages origin.
+- The realtime Worker must accept a `connection_id` query parameter and preserve the existing `entity.update` event envelope. The adapter provides client-side connection IDs; the server must validate and scope subscriptions.
 
 ## API route inventory
 
