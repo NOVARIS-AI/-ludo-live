@@ -587,6 +587,18 @@ export default {
     if (request.method === "OPTIONS") return withCors(new Response(null, { status: 204 }), origin);
     try {
       if (url.pathname === "/api/_healthcheck") return withCors(json({ message: "Success", platform: "cloudflare-workers" }), origin);
+      let authenticatedUser: { id: string; name: string; email: string } | null = null;
+      const isAuthRoute = /^\/api\/auth\/(register|login|me|logout)$/.test(url.pathname);
+      if (url.pathname.startsWith("/api/") && !isAuthRoute) {
+        const token = (request.headers.get("authorization") || "").replace(/^Bearer\\s+/i, "");
+        if (!token) return withCors(fail("Sign in to continue.", 401), origin);
+        const authStore = env.APP_DATA.get(env.APP_DATA.idFromName("global"));
+        const verified = await authStore.fetch("https://data/auth/verify", { method: "POST", body: JSON.stringify({ token }) });
+        if (!verified.ok) return withCors(fail("Your session is invalid or has expired. Sign in again.", 401), origin);
+        const payload = await verified.json<any>();
+        authenticatedUser = payload.user;
+        if (!authenticatedUser?.id) return withCors(fail("Authentication required.", 401), origin);
+      }
       if (url.pathname === "/connect") {
         if (!requestOrigin || !allowedOrigins.includes(requestOrigin)) return fail("Realtime origin is not allowed.", 403);
         const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
@@ -601,7 +613,7 @@ export default {
       }
       if (url.pathname === "/api/rooms" || url.pathname === "/api/rooms/computer") {
         if (request.method !== "POST") return withCors(fail("Method not allowed.", 405), origin);
-        const input = await request.json<any>(), playerId = clean(input.playerId);
+        const input = await request.json<any>(), playerId = authenticatedUser?.id || "";
         if (!playerId) return withCors(fail("Player session is missing."), origin);
         const name = nameOf(input.name), gameMode = ["one-v-one", "duo"].includes(input.gameMode) ? input.gameMode : "classic";
         const code = newCode(), mode = url.pathname.endsWith("/computer") ? "computer" : "friends", now = Date.now();
@@ -633,7 +645,7 @@ export default {
         const stub = env.LUDO_ROOMS.get(env.LUDO_ROOMS.idFromName(code));
         if (request.method === "GET" && !suffix) return withCors(await stub.fetch("https://room/read"), origin);
         if (request.method === "GET" && suffix === "spectate") return withCors(await stub.fetch("https://room/read?spectate=1"), origin);
-        if (request.method === "POST") return withCors(await stub.fetch("https://room/action", { method: "POST", body: JSON.stringify({ action: suffix, input: await request.json() }) }), origin);
+        if (request.method === "POST") const actionInput = await request.json<any>();\n        actionInput.playerId = authenticatedUser!.id;\n        return withCors(await stub.fetch("https://room/action", { method: "POST", body: JSON.stringify({ action: suffix, input: actionInput }) }), origin);
       }
 
       if (url.pathname.startsWith("/api/auth/") || url.pathname.startsWith("/api/tournaments") || url.pathname === "/api/leaderboard" || url.pathname === "/api/safety/report" || url.pathname === "/api/safety/block" || url.pathname === "/api/integrations/manifest" || url.pathname === "/api/friends/request" || url.pathname === "/api/friends/respond" || url.pathname === "/api/season/leaderboard" || url.pathname.startsWith("/api/cosmetics/") || /^\/api\/players\/[^/]+\/(summary|blocked|progression|friends)$/.test(url.pathname)) {
@@ -649,13 +661,21 @@ export default {
         if (url.pathname === "/api/season/leaderboard") target = "/season/leaderboard";
         if (url.pathname.startsWith("/api/cosmetics/")) target = url.pathname.slice(4);
         if (url.pathname === "/api/integrations/manifest") target = "/manifest";
-        return withCors(await data.fetch("https://data" + target, { method: request.method, body: request.method === "GET" ? undefined : await request.text() }), origin);
+        let dataBody: any = undefined;
+        if (request.method !== "GET") {
+          const rawBody = await request.json<any>().catch(() => ({}));
+          dataBody = { ...rawBody };
+          for (const key of ["playerId", "requesterId", "fromPlayerId", "reporterId", "blockerId", "userId"]) {
+            if (key in dataBody) dataBody[key] = authenticatedUser!.id;
+          }
+        }
+        return withCors(await data.fetch("https://data" + target, { method: request.method, body: request.method === "GET" ? undefined : JSON.stringify(dataBody || {}) }), origin);
       }
       if (url.pathname.startsWith("/api/matchmaking/")) {
         const action = url.pathname.split("/").pop();
         if (!["join", "status", "cancel"].includes(action || "") || request.method !== "POST") return withCors(fail("Not found.", 404), origin);
         const lobby = env.MATCHMAKING.get(env.MATCHMAKING.idFromName("global"));
-        return withCors(await lobby.fetch("https://lobby/" + action, { method: "POST", body: JSON.stringify(await request.json()) }), origin);
+        const queueInput = await request.json<any>();\n        queueInput.playerId = authenticatedUser!.id;\n        return withCors(await lobby.fetch("https://lobby/" + action, { method: "POST", body: JSON.stringify(queueInput) }), origin);
       }
       return withCors(fail("This API route is not migrated yet.", 501), origin);
     } catch (error) { return withCors(fail(error instanceof Error ? error.message : "Unexpected server error.", 500), origin); }
