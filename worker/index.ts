@@ -516,11 +516,16 @@ function withCors(response: Response, origin: string) {
 }
 export default {
   async fetch(request: Request, env: Env) {
-    const url = new URL(request.url), origin = env.ALLOWED_ORIGIN || request.headers.get("origin") || "*";
+    const url = new URL(request.url);
+    const requestOrigin = request.headers.get("origin") || "";
+    const allowedOrigins = (env.ALLOWED_ORIGIN || "").split(",").map(value => value.trim()).filter(Boolean);
+    if (requestOrigin && !allowedOrigins.includes(requestOrigin)) return fail("Origin is not allowed.", 403);
+    const origin = requestOrigin || allowedOrigins[0] || "null";
     if (request.method === "OPTIONS") return withCors(new Response(null, { status: 204 }), origin);
     try {
       if (url.pathname === "/api/_healthcheck") return withCors(json({ message: "Success", platform: "cloudflare-workers" }), origin);
       if (url.pathname === "/connect") {
+        if (!requestOrigin || !allowedOrigins.includes(requestOrigin)) return fail("Realtime origin is not allowed.", 403);
         const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
         const target = new URL("https://hub/connect");
         target.searchParams.set("connection_id", url.searchParams.get("connection_id") || "");
