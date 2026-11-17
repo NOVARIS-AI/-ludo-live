@@ -1,6 +1,7 @@
 export interface Env {
   LUDO_ROOMS: DurableObjectNamespace;
   REALTIME_HUB: DurableObjectNamespace;
+  MATCHMAKING: DurableObjectNamespace;
   ALLOWED_ORIGIN: string;
 }
 
@@ -280,7 +281,67 @@ export class LudoRoom {
     return fail("This action is not migrated yet.", 501);
   }
 }
-export class RealtimeHub {
+
+type QueueEntry = { queueId: string; playerId: string; name: string; status: "waiting" | "matched" | "cancelled" | "expired"; joinedAt: number; roomCode?: string };
+export class MatchmakingLobby {
+  constructor(private state: DurableObjectState, private env: Env) {}
+  async fetch(request: Request) {
+    const url = new URL(request.url);
+    if (request.method !== "POST") return fail("Not found.", 404);
+    const input = await request.json<any>();
+    const entries = await this.state.storage.get<QueueEntry[]>("entries") || [];
+    if (url.pathname === "/join") {
+      const queueId = clean(input.queueId, 100), playerId = clean(input.playerId), name = nameOf(input.name);
+      if (!queueId || !playerId) return fail("Queue and player IDs are required.");
+      const active = entries.find(e => e.playerId === playerId && e.status === "waiting");
+      if (active) return json({ status: "waiting", queueId: active.queueId });
+      const now = Date.now();
+      const opponent = entries.find(e => e.status === "waiting" && e.playerId !== playerId && now - e.joinedAt < 90000);
+      if (!opponent) {
+        entries.push({ queueId, playerId, name, status: "waiting", joinedAt: now });
+        await this.state.storage.put("entries", entries.slice(-300));
+        return json({ status: "waiting", queueId });
+      }
+      const code = newCode();
+      const players: Player[] = [
+        { id: opponent.playerId, name: opponent.name, color: "red", host: true, joinedAt: now },
+        { id: playerId, name, color: "yellow", host: false, joinedAt: now }
+      ];
+      const room: Room = {
+        id: code, code, players, status: "playing", mode: "random", gameMode: "one-v-one",
+        state: newState(players, players[0].name + " goes first. Roll the dice!"),
+        messages: [], callParticipants: [], version: 1, createdAt: now, lastActivity: now, replaySnapshots: []
+      };
+      const roomStub = this.env.LUDO_ROOMS.get(this.env.LUDO_ROOMS.idFromName(code));
+      const created = await roomStub.fetch("https://room/create", { method: "POST", body: JSON.stringify(room) });
+      if (!created.ok) return fail("Could not create the match. Please search again.", 503);
+      opponent.status = "matched"; opponent.roomCode = code;
+      entries.push({ queueId, playerId, name, status: "matched", joinedAt: now, roomCode: code });
+      await this.state.storage.put("entries", entries.slice(-300));
+      return json({ status: "matched", room });
+    }
+    if (url.pathname === "/status") {
+      const entry = entries.find(e => e.queueId === clean(input.queueId, 100) && e.playerId === clean(input.playerId));
+      if (!entry) return json({ status: "expired" });
+      if (entry.status === "waiting" && Date.now() - entry.joinedAt > 90000) { entry.status = "expired"; await this.state.storage.put("entries", entries); }
+      if (entry.status === "matched" && entry.roomCode) {
+        const roomStub = this.env.LUDO_ROOMS.get(this.env.LUDO_ROOMS.idFromName(entry.roomCode));
+        const result = await roomStub.fetch("https://room/read");
+        return json({ status: "matched", ...(await result.json<any>()) });
+      }
+      return json({ status: entry.status });
+    }
+    if (url.pathname === "/cancel") {
+      const entry = entries.find(e => e.queueId === clean(input.queueId, 100) && e.playerId === clean(input.playerId));
+      if (!entry) return json({ status: "expired" });
+      if (entry.status === "waiting") entry.status = "cancelled";
+      await this.state.storage.put("entries", entries);
+      return json({ status: entry.status });
+    }
+    return fail("Not found.", 404);
+  }
+}
+\nexport class RealtimeHub {
   constructor(private state: DurableObjectState) {}
   async fetch(request: Request) {
     const url = new URL(request.url);
@@ -372,7 +433,12 @@ export default {
         if (request.method === "POST") return withCors(await stub.fetch("https://room/action", { method: "POST", body: JSON.stringify({ action: suffix, input: await request.json() }) }), origin);
       }
       if (request.method === "GET" && parts[0] === "api" && parts[1] === "rooms" && parts[2] && parts[3] === "replay") { const roomCode = parts[2].toUpperCase(); const roomRes = await stub.fetch("https://room/read"); const payload = await roomRes.json<any>(); const room = payload.room as Room | undefined; if (!room || room.status !== "finished") return withCors(fail("Replay is available after a match has finished.", 404), origin); return withCors(json({ roomCode, completedAt: room.lastActivity, gameMode: room.gameMode, players: room.players, winnerId: room.state.winner, winnerTeam: room.state.winnerTeam || null, events: room.replaySnapshots || [] }), origin); }
-      if (url.pathname === "/api/matchmaking/join" || url.pathname === "/api/matchmaking/status" || url.pathname === "/api/matchmaking/cancel") return withCors(fail("Matchmaking lobby is the next migration module.", 503), origin);
+      if (url.pathname.startsWith("/api/matchmaking/")) {
+        const action = url.pathname.split("/").pop();
+        if (!["join", "status", "cancel"].includes(action || "") || request.method !== "POST") return withCors(fail("Not found.", 404), origin);
+        const lobby = env.MATCHMAKING.get(env.MATCHMAKING.idFromName("global"));
+        return withCors(await lobby.fetch("https://lobby/" + action, { method: "POST", body: JSON.stringify(await request.json()) }), origin);
+      }
       return withCors(fail("This API route is not migrated yet.", 501), origin);
     } catch (error) { return withCors(fail(error instanceof Error ? error.message : "Unexpected server error.", 500), origin); }
   }
