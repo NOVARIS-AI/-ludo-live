@@ -605,6 +605,11 @@ export default {
       }
       if (url.pathname === "/connect") {
         if (!requestOrigin || !allowedOrigins.includes(requestOrigin)) return fail("Realtime origin is not allowed.", 403);
+        const sessionToken = clean(url.searchParams.get("token"), 200);
+        if (!sessionToken) return fail("Sign in to connect to realtime.", 401);
+        const authStore = env.APP_DATA.get(env.APP_DATA.idFromName("global"));
+        const authCheck = await authStore.fetch("https://data/auth/verify", { method: "POST", body: JSON.stringify({ token: sessionToken }) });
+        if (!authCheck.ok) return fail("Realtime session is invalid or expired.", 401);
         const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
         const target = new URL("https://hub/connect");
         target.searchParams.set("connection_id", url.searchParams.get("connection_id") || "");
