@@ -447,6 +447,12 @@ export default function App() {
   }
 
   async function signOut() {
+    if (callJoinedRef.current) {
+      try { await leaveCall(); } catch { /* continue signing out */ }
+    }
+    if (room?.code) {
+      try { await api.post('/api/rooms/' + room.code + '/leave', { playerId }); } catch { /* continue signing out */ }
+    }
     try { await api.post('/api/auth/logout', {}); } catch { /* clear local session even if offline */ }
     setAuthToken(null); setAuthUser(null); setRoom(null);
     localStorage.removeItem('ludo-live-room-code');
