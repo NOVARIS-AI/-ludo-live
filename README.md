@@ -1,28 +1,29 @@
-# Ludo Live — migration source archive
+# Ludo Live — standalone migration
 
-This repository preserves the last successful AppDeploy source snapshot and the in-progress Cloudflare migration.
+This repository preserves the last successful AppDeploy source snapshot and the in-progress standalone Cloudflare migration.
 
-## Implemented migration modules
-- Frontend HTTP adapter: `src/lib/api.ts`.
-- Frontend realtime WebSocket adapter: `src/lib/realtime.ts`.
-- Cloudflare Worker API: `worker/index.ts`.
-- `LudoRoom` Durable Object stores each room and serializes game actions.
-- `RealtimeHub` Durable Object manages WebSocket connections, entity subscriptions and broadcasts.
-- Room create, computer room create, room fetch, spectate, join, start, roll, move, pass, bot turn, public chat, private chat, call join/leave, WebRTC signaling and leave are implemented in the Worker.
-- The Worker returns explicit not-yet-migrated responses for matchmaking and the D1-backed tournament/profile/social/history features.
+## Migrated modules
+- React/Vite frontend with a fetch-based API client and browser WebSocket adapter; no frontend AppDeploy SDK imports remain.
+- Responsive game presentation foundation with a landscape-first match HUD, scalable board, dice controls, compact mobile top bar, and slide-over chat/crew/hangout panels.
+- Cloudflare Worker API with CORS and health-check routes.
+- `LudoRoom` Durable Object: room persistence, serialized actions, game rules, computer turns, public/private chat, call signaling and bounded replay snapshots.
+- `RealtimeHub` Durable Object: WebSocket connections, subscriptions and entity-update broadcasts.
+- `MatchmakingLobby` Durable Object: quick 1v1 pairing, status polling, cancellation and queue expiry.
+- `AppData` Durable Object: tournament creation/join/start/result reporting, global leaderboard, player summaries, block/report records, and a disconnected integration manifest.
+- Completed games are copied into persistent match-result storage; replay snapshots remain available through the room replay endpoint.
 
 ## Important limitations
-This is **not production-ready and has not been deployed**. Player identity is currently supplied by the client and is not authenticated; do not expose this Worker publicly until authentication, authorization, rate limits, abuse controls and origin restrictions are completed. WebRTC signaling is implemented, but a TURN relay is still needed for reliable calls across restrictive networks. Matchmaking, tournaments, global rankings, player profiles, friends, moderation persistence and replay history still need their D1/lobby migration.
+This is **not production-ready and has not been deployed**. The current player ID is a client-generated guest identifier, not an authenticated identity. Do not expose this Worker publicly until authentication/authorization, rate limits, abuse controls and an exact allowed origin are configured. Reports are stored for future moderation; a staffed moderation workflow is not included. Block records are persisted and returned to the client, but are not a complete safety system. WebRTC signaling is present, but a TURN relay is still needed for reliable calls across restrictive networks.
 
-The AppDeploy production app remains the live version while this replacement is built and tested. The original AppDeploy backend files remain in the repository as historical source. No secrets, environment values or user records are committed. Cross-app integrations remain disconnected.
+The UI styles and layout have been added in source, but device-by-device visual QA and end-to-end multiplayer tests are still required. The AppDeploy production app remains live and untouched while this replacement is built and tested. Original AppDeploy backend files remain as historical reference. No secrets, environment values or user records are committed. Cross-app integrations remain disconnected.
 
 ## Local development
 1. Install Node.js 22 or newer and run `npm install`.
 2. Start Vite with `npm run dev`.
 3. Start the Worker locally with `npm run dev:worker`.
 4. Set `VITE_API_BASE_URL` to the Worker HTTP origin.
-5. Set `VITE_REALTIME_URL` to the Worker WebSocket URL ending in `/connect`.
-6. Before any deployment, replace wildcard CORS with the exact Pages origin and add authentication and rate limiting.
+5. `VITE_REALTIME_URL` is optional when `VITE_API_BASE_URL` is set; the app derives the WebSocket `/connect` URL automatically.
+6. Run `npm run build`, `npm run typecheck`, and `npx wrangler deploy --dry-run` before deployment.
 
 ## Cloudflare resources
-Wrangler declares SQLite-backed Durable Object classes `LudoRoom` and `RealtimeHub`. Deployment requires Cloudflare account authorization. No deployment has been performed.
+Wrangler declares SQLite-backed Durable Object classes `LudoRoom`, `RealtimeHub`, `MatchmakingLobby`, and `AppData`. Deployment requires Cloudflare account authorization. No deployment has been performed.
