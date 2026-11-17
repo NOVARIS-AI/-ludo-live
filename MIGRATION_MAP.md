@@ -1,18 +1,18 @@
 # Migration status
 
-## Implemented in this stage
-- Cloudflare Worker entry point.
-- SQLite-backed Durable Object room storage and serialized room actions.
-- RealtimeHub Durable Object with WebSocket connections, entity subscriptions and broadcasts.
-- Core room routes: create, create computer room, fetch, spectate, join, start, roll, move, pass, chat, call join/leave and leave.
-- Explicit 503 response for matchmaking and 501 for routes not yet migrated.
+## Implemented
+- Frontend HTTP and WebSocket adapters no longer depend on the AppDeploy client.
+- Cloudflare Worker entry point with CORS and health-check routes.
+- Per-room Durable Object storage and serialized room actions.
+- Realtime Durable Object with WebSocket upgrade, subscriptions and entity update broadcasts.
+- Room create/join/start/roll/move/pass/bot-turn/chat/private-chat/call-join/call-leave/call-signal/leave and spectate routes.
 
-## Remaining
-- Matchmaking lobby and atomic queue claims.
-- D1 persistence for tournaments, leaderboard, player profiles, friends, reports, results and replay history.
-- Private chat and WebRTC signaling relay.
-- Authentication, rate limits, input validation hardening and moderation.
-- Frontend layout and full multiplayer test suite.
-- Replace wildcard CORS with the exact Pages origin and configure Worker environment variables.
+## Not yet migrated
+- Atomic quick-match lobby and matchmaking status/cancel.
+- D1-backed tournaments, global leaderboard, player profiles, progression, cosmetics, friends, reports, blocks, match result persistence and replay history.
+- Authentication, identity verification, rate limits, anti-abuse and full moderation.
+- TURN relay for reliable voice/video calls.
+- Full gameplay UI adaptation and end-to-end multiplayer tests.
 
-Keep the AppDeploy production app online until the replacement has passed functional, security and multiplayer tests. No production deployment has been made.
+## Production gate
+Do not switch the live AppDeploy app until the Worker and frontend pass build, security and multiplayer tests. Configure an exact allowed origin, authenticate player identities, protect room actions, and set real Cloudflare environment values before public deployment. No production deployment has been made.
