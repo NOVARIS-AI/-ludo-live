@@ -1,0 +1,200 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  font-family: 'DM Sans', sans-serif;
+  color: #f7f5ff;
+  background: #0d0b16;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #0d0b16;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+.app-root {
+  min-height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background:
+    radial-gradient(
+      circle at 18% 12%,
+      rgba(111, 68, 190, 0.19),
+      transparent 31%
+    ),
+    radial-gradient(
+      circle at 88% 88%,
+      rgba(16, 156, 151, 0.12),
+      transparent 32%
+    ),
+    #0d0b16;
+}
+.ambient {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  pointer-events: none;
+  opacity: 0.22;
+}
+.ambient-one {
+  width: 280px;
+  height: 280px;
+  background: #8c52e8;
+  top: 110px;
+  left: -130px;
+}
+.ambient-two {
+  width: 250px;
+  height: 250px;
+  background: #1aaca1;
+  right: -110px;
+  bottom: 30px;
+}
+.topbar,
+.game-topbar {
+  height: 76px;
+  max-width: 1240px;
+  margin: auto;
+  padding: 0 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  z-index: 2;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 1.3px;
+}
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(145deg, #9d71ff, #6940c7);
+  box-shadow: 0 7px 24px rgba(135, 91, 232, 0.27);
+}
+.brand-accent {
+  color: #a98aff;
+}
+.online-pill,
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #a6a0b7;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+}
+.online-pill i,
+.board-live i,
+.eyebrow-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #54d6a0;
+  box-shadow: 0 0 0 4px rgba(84, 214, 160, 0.1);
+}
+.hero {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 78px 34px 65px;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  align-items: center;
+  gap: 75px;
+  position: relative;
+  z-index: 1;
+}
+.eyebrow,
+.mini-label {
+  color: #a990f0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hero h1 {
+  margin: 22px 0 18px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(46px, 6.2vw, 76px);
+  line-height: 0.99;
+  letter-spacing: -3.8px;
+  font-weight: 700;
+}
+.hero h1 span {
+  color: #a78bfa;
+}
+.hero-description {
+  color: #a7a1b5;
+  font-size: 15px;
+  line-height: 1.8;
+  max-width: 440px;
+}
+.hero-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 19px;
+  margin-top: 29px;
+  color: #c8c2d4;
+  font-size: 12px;
+}
+.hero-points span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.hero-points svg {
+  color: #a78bfa;
+}
+.join-card,
+.side-card,
+.board-card {
+  background: linear-gradient(
+    145deg,
+    rgba(31, 27, 47, 0.96),
+    rgba(21, 19, 32, 0.96)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+  border-radius: 22px;
+}
+.join-card {
+  padding: 28px;
+  max-width: 420px;
+  width: 100%;
+  justify-self: end;
+}
+.card-orbit {
+  height: 94px;
+  border-radius: 16px;

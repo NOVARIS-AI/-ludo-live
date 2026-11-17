@@ -1,0 +1,93 @@
+[
+  {
+    "name": "Create a private room and complete a synchronized match",
+    "sanity": true,
+    "viewport": "mobile",
+    "covers": [
+      "guest player setup",
+      "private room creation",
+      "invite code join",
+      "realtime turn synchronization",
+      "legal token movement"
+    ],
+    "description": "Verifies the core multiplayer game remains playable after the competition hub is added.",
+    "steps": [
+      "Actor A creates a private room",
+      "Actor B joins using the six-character code",
+      "Actor A starts the match",
+      "Players roll and make legal moves"
+    ],
+    "expected": "Both players see the same room and synchronized game state."
+  },
+  {
+    "name": "Create and join a free tournament",
+    "viewport": "desktop",
+    "covers": [
+      "tournament creation",
+      "tournament player registration",
+      "tournament capacity validation",
+      "host-only tournament start",
+      "single-elimination bracket generation"
+    ],
+    "description": "Checks that players can create a tournament, join it and let the host start its bracket.",
+    "steps": [
+      "Actor A opens Competition Centre and creates a 4-player tournament",
+      "Actor B opens the same tournament list and joins",
+      "Actor A starts the tournament",
+      "Observe the generated first-round fixtures"
+    ],
+    "expected": "The tournament changes from open to live and displays generated fixtures without requiring external integrations."
+  },
+  {
+    "name": "View rankings and personal match history",
+    "viewport": "mobile",
+    "covers": [
+      "completed-match leaderboard",
+      "player win/loss summary",
+      "recent match history",
+      "guest player identity"
+    ],
+    "description": "Verifies completed games feed the rankings and the current player's match summary.",
+    "steps": [
+      "Complete a match with two human players",
+      "Open Competition Centre and select Rankings",
+      "Select My record"
+    ],
+    "expected": "The completed match contributes to the relevant players' totals and appears in the participant's recent history."
+  },
+  {
+    "name": "Watch a room without joining or controlling it",
+    "viewport": "desktop",
+    "covers": [
+      "read-only spectator mode",
+      "spectator room lookup",
+      "spectator state refresh",
+      "spectator cannot submit game actions"
+    ],
+    "description": "Checks that a viewer can follow a match through a public read-only room projection.",
+    "steps": [
+      "Actor A and Actor B start a match",
+      "Actor C opens Watch match and enters the room code",
+      "Observe the public player list and current turn",
+      "Actor A makes a move and Actor C observes the refreshed state"
+    ],
+    "expected": "Actor C sees public match information and has no player seat or game controls."
+  },
+  {
+    "name": "Expose a consent-first integration manifest",
+    "viewport": "mobile",
+    "covers": [
+      "versioned integration manifest",
+      "future plugin capability declaration",
+      "consent-required integration policy",
+      "private chat and media stream exclusion"
+    ],
+    "description": "Verifies the integration foundation advertises only approved future summary scopes and excludes private communications and live media.",
+    "steps": [
+      "Open Competition Centre and select Connect",
+      "Review the API version and future plugin list",
+      "Review the allowed scopes and never-exposed data list"
+    ],
+    "expected": "The app reports zero connected apps, requires consent for future sharing, and excludes private messages, camera, microphone, contacts and credentials."
+  }
+]
