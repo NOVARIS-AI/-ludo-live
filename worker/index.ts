@@ -9,7 +9,7 @@ export interface Env {
 type Player = { id: string; name: string; color: string; host: boolean; joinedAt: number; isBot?: boolean; teamId?: string };
 type Room = {
   id: string; code: string; players: Player[]; status: "waiting" | "playing" | "finished";
-  mode: "friends" | "computer"; gameMode: "classic" | "one-v-one" | "duo";
+  mode: "friends" | "computer" | "random"; gameMode: "classic" | "one-v-one" | "duo";
   state: { currentTurnIndex: number; dice: number | null; consecutiveSixes: number; tokens: Record<string, number[]>; winner: string | null; winnerTeam: string | null; turnMessage: string; lastRoll: number | null; botActionVersion?: number };
   messages: Array<{ id: string; playerId: string; name: string; color: string; text: string; kind: string; createdAt: number }>;
   callParticipants: string[]; version: number; createdAt: number; lastActivity: number;
