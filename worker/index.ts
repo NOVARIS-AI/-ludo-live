@@ -579,7 +579,7 @@ export default {
         if (url.pathname === "/api/friends/request") target = "/friends/request";
         if (url.pathname === "/api/friends/respond") target = "/friends/respond";
         if (url.pathname === "/api/season/leaderboard") target = "/season/leaderboard";
-        if (url.pathname.startsWith("/api/cosmetics/")) target = url.pathname.replace(/^\\/api/, "");
+        if (url.pathname.startsWith("/api/cosmetics/")) target = url.pathname.slice(4);
         if (url.pathname === "/api/integrations/manifest") target = "/manifest";
         return withCors(await data.fetch("https://data" + target, { method: request.method, body: request.method === "GET" ? undefined : await request.text() }), origin);
       }
