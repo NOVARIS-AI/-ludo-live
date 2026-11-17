@@ -683,7 +683,9 @@ export default {
         const action = url.pathname.split("/").pop();
         if (!["join", "status", "cancel"].includes(action || "") || request.method !== "POST") return withCors(fail("Not found.", 404), origin);
         const lobby = env.MATCHMAKING.get(env.MATCHMAKING.idFromName("global"));
-        const queueInput = await request.json<any>();\n        queueInput.playerId = authenticatedUser!.id;\n        return withCors(await lobby.fetch("https://lobby/" + action, { method: "POST", body: JSON.stringify(queueInput) }), origin);
+        const queueInput = await request.json<any>();
+        queueInput.playerId = authenticatedUser!.id;
+        return withCors(await lobby.fetch("https://lobby/" + action, { method: "POST", body: JSON.stringify(queueInput) }), origin);
       }
       return withCors(fail("This API route is not migrated yet.", 501), origin);
     } catch (error) { return withCors(fail(error instanceof Error ? error.message : "Unexpected server error.", 500), origin); }
