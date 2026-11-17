@@ -17,6 +17,11 @@ export class ApiError extends Error {
 
 let authToken = '';
 export function setAuthToken(token:string) { authToken=token; }
+export function setAuthToken(token: string | null) {
+  if (token) localStorage.setItem('ludo-live-auth-token', token);
+  else localStorage.removeItem('ludo-live-auth-token');
+}
+
 const configuredBase = (import.meta.env.VITE_API_BASE_URL || '').trim();
 let API_BASE = configuredBase;
 while (API_BASE.endsWith('/')) API_BASE = API_BASE.slice(0, -1);
