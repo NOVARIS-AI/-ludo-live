@@ -590,7 +590,7 @@ export default {
       let authenticatedUser: { id: string; name: string; email: string } | null = null;
       const isAuthRoute = /^\/api\/auth\/(register|login|me|logout)$/.test(url.pathname);
       if (url.pathname.startsWith("/api/") && !isAuthRoute) {
-        const token = (request.headers.get("authorization") || "").replace(/^Bearer\\s+/i, "");
+        const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
         if (!token) return withCors(fail("Sign in to continue.", 401), origin);
         const authStore = env.APP_DATA.get(env.APP_DATA.idFromName("global"));
         const verified = await authStore.fetch("https://data/auth/verify", { method: "POST", body: JSON.stringify({ token }) });
@@ -669,7 +669,7 @@ export default {
             if (key in dataBody) dataBody[key] = authenticatedUser!.id;
           }
         }
-        return withCors(await data.fetch("https://data" + target, { method: request.method, body: request.method === "GET" ? undefined : JSON.stringify(dataBody || {}) }), origin);
+        return withCors(await data.fetch("https://data" + target, { method: request.method, headers: request.headers.get("authorization") ? { Authorization: request.headers.get("authorization")! } : undefined, body: request.method === "GET" ? undefined : JSON.stringify(dataBody || {}) }), origin);
       }
       if (url.pathname.startsWith("/api/matchmaking/")) {
         const action = url.pathname.split("/").pop();
