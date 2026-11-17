@@ -297,6 +297,15 @@ function Board({
           <i /> LIVE MATCH
         </span>
       </div>
+      <div className="board-player-row">
+        {room.players.map((player, index) => (
+          <div className={'board-player-badge player-' + player.color + (room.status === 'playing' && room.state.currentTurnIndex === index ? ' is-turn' : '')} key={player.id}>
+            <span>{player.name.slice(0, 1).toUpperCase()}</span>
+            <b>{player.name}</b>
+            <small>{player.isBot ? 'AI' : room.callParticipants?.includes(player.id) ? 'IN CALL' : 'READY'}</small>
+          </div>
+        ))}
+      </div>
       <div className="ludo-board" aria-label="Ludo game board">
         {cells}
         <div className="board-center">
