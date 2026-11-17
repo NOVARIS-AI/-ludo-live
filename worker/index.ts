@@ -348,7 +348,7 @@ export class AppData {
         if (!item.roomCode || !item.winnerId) return fail("A completed match result is required.");
         const items=await this.list<StoredResult>("results");
         const index=items.findIndex(x=>x.roomCode===item.roomCode);
-        if(index>=0) items[index]=item; else items.push(item);
+        if(index>=0) return json({ok:true,duplicate:true}); else items.push(item);
         await this.save("results",items.slice(-2000));
         return json({ok:true});
       }
