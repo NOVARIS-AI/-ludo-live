@@ -210,23 +210,6 @@ export class LudoRoom {
       }
       return this.save(room);
     }
-    if (action === "bot/turn") {
-      const index = room.state.currentTurnIndex, bot = room.players[index];
-      if (room.status !== "playing" || room.mode !== "computer" || !bot?.isBot) return fail("It is not a computer turn.", 403);
-      const dice = Math.floor(Math.random() * 6) + 1;
-      room.state.lastRoll = dice;
-      if (dice === 6 && room.state.consecutiveSixes >= 2) { room.state.consecutiveSixes = 0; room.state.currentTurnIndex = nextPlayer(room, index); room.state.turnMessage = "Three sixes! " + room.players[room.state.currentTurnIndex].name + " gets the next turn."; return this.save(room, beforeState); }
-      room.state.consecutiveSixes = dice === 6 ? room.state.consecutiveSixes + 1 : 0;
-      const legal = validMoves(room, bot.id, dice);
-      if (!legal.length) { room.state.consecutiveSixes = 0; room.state.currentTurnIndex = nextPlayer(room, index); room.state.turnMessage = bot.name + " rolled " + dice + " but has no legal move. " + room.players[room.state.currentTurnIndex].name + " is up next."; return this.save(room, beforeState); }
-      const positions = room.state.tokens[bot.id];
-      const chosen = legal.sort((a,b) => (positions[b] === -1 ? 24 : positions[b] + dice) - (positions[a] === -1 ? 24 : positions[a] + dice))[0];
-      const captured = moveToken(room, bot, chosen, dice);
-      if (room.state.tokens[bot.id].every(p => p === 57)) { room.status = "finished"; room.state.winner = bot.id; room.state.turnMessage = bot.name + " wins the game!"; }
-      else if (dice === 6) room.state.turnMessage = captured ? bot.name + " captured a token and gets another roll!" : bot.name + " rolled a six and gets another roll!";
-      else { room.state.currentTurnIndex = nextPlayer(room, index); room.state.turnMessage = room.players[room.state.currentTurnIndex].name + " is up next."; }
-      return this.save(room, beforeState);
-    }
     if (action === "chat") {
       const index = requirePlayer(room, playerId), text = clean(input.text, 140);
       if (!text) return fail("Write a message first.");
