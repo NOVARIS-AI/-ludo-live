@@ -11,6 +11,7 @@ type Room = {
   state: { currentTurnIndex: number; dice: number | null; consecutiveSixes: number; tokens: Record<string, number[]>; winner: string | null; winnerTeam: string | null; turnMessage: string; lastRoll: number | null; botActionVersion?: number };
   messages: Array<{ id: string; playerId: string; name: string; color: string; text: string; kind: string; createdAt: number }>;
   callParticipants: string[]; version: number; createdAt: number; lastActivity: number;
+  replaySnapshots: Array<{ version: number; at: number; turnMessage: string; currentTurnIndex: number; dice: number | null; tokens: Record<string, number[]>; winner: string | null; winnerTeam?: string | null }>;
 };
 const colors = ["red", "blue", "yellow", "green"];
 const starts: Record<string, number> = { red: 1, blue: 14, yellow: 27, green: 40 };
@@ -93,8 +94,12 @@ export class LudoRoom {
     const hub = this.env.REALTIME_HUB.get(this.env.REALTIME_HUB.idFromName("global"));
     await hub.fetch("https://hub/broadcast", { method: "POST", body: JSON.stringify({ v: 1, type: "entity.update", payload: { entity_type: type, entity_id: id, data } }) });
   }
-  private async save(room: Room) {
-    room.version += 1; room.lastActivity = Date.now();
+  private async save(room: Room, beforeState?: string) {
+    const nextVersion = room.version + 1;
+    if (beforeState !== undefined && beforeState !== JSON.stringify([room.state, room.status])) {
+      room.replaySnapshots = [...(room.replaySnapshots || []), { version: nextVersion, at: Date.now(), turnMessage: room.state.turnMessage, currentTurnIndex: room.state.currentTurnIndex, dice: room.state.dice, tokens: structuredClone(room.state.tokens), winner: room.state.winner, winnerTeam: room.state.winnerTeam }].slice(-180);
+    }
+    room.version = nextVersion; room.lastActivity = Date.now();
     await this.state.storage.put("room", room);
     await this.broadcast("room", room.code, { room });
     return json({ room });
@@ -102,6 +107,7 @@ export class LudoRoom {
   private async action(body: { action: string; input: Record<string, unknown> }) {
     const room = await this.getRoom();
     const input = body.input || {};
+    const beforeState = JSON.stringify([room.state, room.status]);
     const playerId = clean(input.playerId);
     const action = body.action;
     if (action === "join") {
@@ -113,7 +119,7 @@ export class LudoRoom {
       const color = room.gameMode === "one-v-one" ? "yellow" : colors[room.players.length];
       room.players.push({ id: playerId, name, color, host: false, joinedAt: Date.now(), teamId: room.gameMode === "duo" ? (color === "red" || color === "yellow" ? "sun" : "moon") : undefined });
       room.state.turnMessage = name + " joined the room.";
-      return this.save(room);
+      return this.save(room, beforeState);
     }
     if (action === "start") {
       const index = requirePlayer(room, playerId);
@@ -202,6 +208,23 @@ export class LudoRoom {
         }
       }
       return this.save(room);
+    }
+    if (action === "bot/turn") {
+      const index = room.state.currentTurnIndex, bot = room.players[index];
+      if (room.status !== "playing" || room.mode !== "computer" || !bot?.isBot) return fail("It is not a computer turn.", 403);
+      const dice = Math.floor(Math.random() * 6) + 1;
+      room.state.lastRoll = dice;
+      if (dice === 6 && room.state.consecutiveSixes >= 2) { room.state.consecutiveSixes = 0; room.state.currentTurnIndex = nextPlayer(room, index); room.state.turnMessage = "Three sixes! " + room.players[room.state.currentTurnIndex].name + " gets the next turn."; return this.save(room, beforeState); }
+      room.state.consecutiveSixes = dice === 6 ? room.state.consecutiveSixes + 1 : 0;
+      const legal = validMoves(room, bot.id, dice);
+      if (!legal.length) { room.state.consecutiveSixes = 0; room.state.currentTurnIndex = nextPlayer(room, index); room.state.turnMessage = bot.name + " rolled " + dice + " but has no legal move. " + room.players[room.state.currentTurnIndex].name + " is up next."; return this.save(room, beforeState); }
+      const positions = room.state.tokens[bot.id];
+      const chosen = legal.sort((a,b) => (positions[b] === -1 ? 24 : positions[b] + dice) - (positions[a] === -1 ? 24 : positions[a] + dice))[0];
+      const captured = moveToken(room, bot, chosen, dice);
+      if (room.state.tokens[bot.id].every(p => p === 57)) { room.status = "finished"; room.state.winner = bot.id; room.state.turnMessage = bot.name + " wins the game!"; }
+      else if (dice === 6) room.state.turnMessage = captured ? bot.name + " captured a token and gets another roll!" : bot.name + " rolled a six and gets another roll!";
+      else { room.state.currentTurnIndex = nextPlayer(room, index); room.state.turnMessage = room.players[room.state.currentTurnIndex].name + " is up next."; }
+      return this.save(room, beforeState);
     }
     if (action === "chat") {
       const index = requirePlayer(room, playerId), text = clean(input.text, 140);
@@ -308,6 +331,7 @@ export default {
     const url = new URL(request.url), origin = env.ALLOWED_ORIGIN || request.headers.get("origin") || "*";
     if (request.method === "OPTIONS") return withCors(new Response(null, { status: 204 }), origin);
     try {
+      if (url.pathname === "/connect") { const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global")); return hub.fetch("https://hub/connect" + url.search); }
       if (url.pathname === "/api/_healthcheck") return withCors(json({ message: "Success", platform: "cloudflare-workers" }), origin);
       if (url.pathname === "/connect") {
         const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
@@ -333,7 +357,7 @@ export default {
           for (let i = 0; i < count; i++) players.push({ id: "cpu-" + code + "-" + i, name: ["Nova CPU", "Atlas CPU", "Pixel CPU"][i], color: colors[i + 1], host: false, joinedAt: now, isBot: true });
           status = "playing";
         }
-        const room: Room = { id: code, code, players, status, mode, gameMode, state: status === "playing" ? newState(players, name + " goes first. Roll the dice!") : { currentTurnIndex: 0, dice: null, consecutiveSixes: 0, tokens: {}, winner: null, winnerTeam: null, turnMessage: "Waiting for players to join.", lastRoll: null }, messages: [], callParticipants: [], version: 1, createdAt: now, lastActivity: now };
+        const room: Room = { id: code, code, players, status, mode, gameMode, state: status === "playing" ? newState(players, name + " goes first. Roll the dice!") : { currentTurnIndex: 0, dice: null, consecutiveSixes: 0, tokens: {}, winner: null, winnerTeam: null, turnMessage: "Waiting for players to join.", lastRoll: null }, messages: [], callParticipants: [], version: 1, createdAt: now, lastActivity: now, replaySnapshots: [] };
         const stub = env.LUDO_ROOMS.get(env.LUDO_ROOMS.idFromName(code));
         return withCors(await stub.fetch("https://room/create", { method: "POST", body: JSON.stringify(room) }), origin);
       }
@@ -347,6 +371,7 @@ export default {
         if (request.method === "GET" && suffix === "spectate") return withCors(await stub.fetch("https://room/read?spectate=1"), origin);
         if (request.method === "POST") return withCors(await stub.fetch("https://room/action", { method: "POST", body: JSON.stringify({ action: suffix, input: await request.json() }) }), origin);
       }
+      if (request.method === "GET" && parts[0] === "api" && parts[1] === "rooms" && parts[2] && parts[3] === "replay") { const roomCode = parts[2].toUpperCase(); const roomRes = await stub.fetch("https://room/read"); const payload = await roomRes.json<any>(); const room = payload.room as Room | undefined; if (!room || room.status !== "finished") return withCors(fail("Replay is available after a match has finished.", 404), origin); return withCors(json({ roomCode, completedAt: room.lastActivity, gameMode: room.gameMode, players: room.players, winnerId: room.state.winner, winnerTeam: room.state.winnerTeam || null, events: room.replaySnapshots || [] }), origin); }
       if (url.pathname === "/api/matchmaking/join" || url.pathname === "/api/matchmaking/status" || url.pathname === "/api/matchmaking/cancel") return withCors(fail("Matchmaking lobby is the next migration module.", 503), origin);
       return withCors(fail("This API route is not migrated yet.", 501), origin);
     } catch (error) { return withCors(fail(error instanceof Error ? error.message : "Unexpected server error.", 500), origin); }
