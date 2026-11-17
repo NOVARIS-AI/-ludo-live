@@ -423,6 +423,46 @@ export class AppData {
         }
         item.updatedAt=now; await this.save("tournaments",items); return json({tournament:item});
       }
+      if (path.startsWith("/friends/") && method === "GET") {
+        const playerId=decodeURIComponent(path.slice(9)), friends=await this.list<any>("friends");
+        const related=friends.filter(f=>f.playerId===playerId||f.targetPlayerId===playerId);
+        return json({playerId,friends:related.filter(f=>f.status==="accepted").map(f=>({playerId:f.playerId===playerId?f.targetPlayerId:f.playerId,name:f.playerId===playerId?f.targetPlayerName:f.playerName})),incoming:related.filter(f=>f.status==="pending"&&f.targetPlayerId===playerId),outgoing:related.filter(f=>f.status==="pending"&&f.playerId===playerId)});
+      }
+      if (path === "/friends/request" && method === "POST") {
+        const input=await request.json<any>(), playerId=clean(input.playerId), playerName=clean(input.playerName,18), targetPlayerId=clean(input.targetPlayerId), targetPlayerName=clean(input.targetPlayerName,18);
+        if(!playerId||!targetPlayerId||!playerName||!targetPlayerName||playerId===targetPlayerId)return fail("Enter valid player details.");
+        const friends=await this.list<any>("friends"), id=[playerId,targetPlayerId].sort().join(":");
+        const existing=friends.find(f=>f.id===id);
+        if(existing){if(existing.status==="accepted")return json({friendship:existing});if(existing.playerId===targetPlayerId&&existing.targetPlayerId===playerId){existing.status="accepted";existing.updatedAt=Date.now();await this.save("friends",friends);return json({friendship:existing});}return json({friendship:existing});}
+        const friendship={id,playerId,playerName,targetPlayerId,targetPlayerName,status:"pending",createdAt:Date.now(),updatedAt:Date.now()};
+        friends.push(friendship);await this.save("friends",friends.slice(-5000));return json({friendship});
+      }
+      if (path === "/friends/respond" && method === "POST") {
+        const input=await request.json<any>(), playerId=clean(input.playerId), friendId=clean(input.friendId), friends=await this.list<any>("friends"), item=friends.find(f=>f.id===friendId&&f.targetPlayerId===playerId);
+        if(!item||item.status!=="pending")return fail("Friend request not found.",404);
+        item.status=input.accept===true?"accepted":"declined";item.updatedAt=Date.now();await this.save("friends",friends);return json({friendship:item});
+      }
+      if (path.startsWith("/progression/") && method === "GET") {
+        const playerId=decodeURIComponent(path.slice(12)), results=await this.list<StoredResult>("results"), matches=results.filter(m=>m.players.some(p=>p.id===playerId));
+        const wins=matches.filter(m=>m.winnerId===playerId||!!m.winnerTeam&&m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam)).length;
+        const cosmetics=[{id:"classic",name:"Classic",winsRequired:0},{id:"ruby-trail",name:"Ruby trail",winsRequired:3},{id:"gold-dice",name:"Golden dice",winsRequired:10},{id:"champion-aura",name:"Champion aura",winsRequired:25}];
+        const profiles=await this.list<any>("profiles"),profile=profiles.find(p=>p.id===playerId),unlocked=cosmetics.filter(c=>wins>=c.winsRequired);
+        const xp=matches.length*30+wins*50;
+        return json({playerId,matchesPlayed:matches.length,wins,xp,coins:matches.length*20+wins*30,level:Math.floor(xp/250)+1,unlockedCosmetics:unlocked,cosmetics,equippedCosmetic:unlocked.some(c=>c.id===profile?.equippedCosmetic)?profile.equippedCosmetic:"classic"});
+      }
+      if (path.startsWith("/cosmetics/") && method === "POST") {
+        const cosmeticId=decodeURIComponent(path.slice(10)),input=await request.json<any>(),playerId=clean(input.playerId),results=await this.list<StoredResult>("results"),matches=results.filter(m=>m.players.some(p=>p.id===playerId)),wins=matches.filter(m=>m.winnerId===playerId||!!m.winnerTeam&&m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam)).length;
+        const required:Record<string,number>={classic:0,"ruby-trail":3,"gold-dice":10,"champion-aura":25};
+        if(!playerId||required[cosmeticId]===undefined||wins<required[cosmeticId])return fail("Play more matches to unlock that cosmetic.",403);
+        const profiles=await this.list<any>("profiles"),profile=profiles.find(p=>p.id===playerId);
+        if(profile)profile.equippedCosmetic=cosmeticId;else profiles.push({id:playerId,equippedCosmetic:cosmeticId,updatedAt:Date.now()});
+        await this.save("profiles",profiles);return json({equippedCosmetic:cosmeticId});
+      }
+      if (path === "/season/leaderboard" && method === "GET") {
+        const now=Date.now(),date=new Date(now),start=Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),1),results=(await this.list<StoredResult>("results")).filter(m=>m.completedAt>=start),stats=new Map<string,any>();
+        for(const match of results)for(const player of match.players){const row=stats.get(player.id)||{playerId:player.id,name:player.name,wins:0,matches:0,points:0};row.matches++;const won=match.winnerId===player.id||!!match.winnerTeam&&player.teamId===match.winnerTeam;if(won)row.wins++;row.points+=won?100:10;stats.set(player.id,row);}
+        return json({season:new Date(start).toISOString().slice(0,7),leaderboard:[...stats.values()].sort((a,b)=>b.points-a.points||b.wins-a.wins).slice(0,50)});
+      }
       return fail("Not found.",404);
     } catch(error) { return fail(error instanceof Error?error.message:"Unexpected data error.",Number((error as any)?.status)||500); }
   }
@@ -528,12 +568,18 @@ export default {
         if (request.method === "POST") return withCors(await stub.fetch("https://room/action", { method: "POST", body: JSON.stringify({ action: suffix, input: await request.json() }) }), origin);
       }
 
-      if (url.pathname.startsWith("/api/tournaments") || url.pathname === "/api/leaderboard" || url.pathname === "/api/safety/report" || url.pathname === "/api/safety/block" || url.pathname === "/api/integrations/manifest" || /^\/api\/players\/[^/]+\/(summary|blocked)$/.test(url.pathname)) {
+      if (url.pathname.startsWith("/api/tournaments") || url.pathname === "/api/leaderboard" || url.pathname === "/api/safety/report" || url.pathname === "/api/safety/block" || url.pathname === "/api/integrations/manifest" || url.pathname === "/api/friends/request" || url.pathname === "/api/friends/respond" || url.pathname === "/api/season/leaderboard" || url.pathname.startsWith("/api/cosmetics/") || /^\/api\/players\/[^/]+\/(summary|blocked|progression|friends)$/.test(url.pathname)) {
         const data = env.APP_DATA.get(env.APP_DATA.idFromName("global"));
         const parts = url.pathname.split("/").filter(Boolean);
         let target = url.pathname.replace(/^\/api/, "");
         if (parts[1] === "players" && parts[3] === "summary") target = "/summary/" + encodeURIComponent(parts[2]);
         if (parts[1] === "players" && parts[3] === "blocked") target = "/blocked/" + encodeURIComponent(parts[2]);
+        if (parts[1] === "players" && parts[3] === "progression") target = "/progression/" + encodeURIComponent(parts[2]);
+        if (parts[1] === "players" && parts[3] === "friends") target = "/friends/" + encodeURIComponent(parts[2]);
+        if (url.pathname === "/api/friends/request") target = "/friends/request";
+        if (url.pathname === "/api/friends/respond") target = "/friends/respond";
+        if (url.pathname === "/api/season/leaderboard") target = "/season/leaderboard";
+        if (url.pathname.startsWith("/api/cosmetics/")) target = url.pathname.replace(/^\\/api/, "");
         if (url.pathname === "/api/integrations/manifest") target = "/manifest";
         return withCors(await data.fetch("https://data" + target, { method: request.method, body: request.method === "GET" ? undefined : await request.text() }), origin);
       }
