@@ -333,7 +333,7 @@ export class MatchmakingLobby {
     return fail("Not found.", 404);
   }
 }
-\n
+
 type StoredTournament = { id:string; name:string; hostId:string; hostName:string; maxPlayers:number; status:"open"|"live"|"completed"; players:Array<{id:string;name:string;joinedAt:number}>; matches:Array<{id:string;round:number;firstPlayerId:string;secondPlayerId:string|null;winnerId:string|null;roomCode?:string}>; championId?:string; createdAt:number; updatedAt:number };
 type StoredResult = { id:string; roomCode:string; winnerId:string|null; winnerTeam:string|null; gameMode:string; players:Array<{id:string;name:string;teamId?:string}>; completedAt:number; replay:any[] };
 export class AppData {
