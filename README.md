@@ -7,9 +7,9 @@ This repository preserves the last successful AppDeploy source snapshot and the 
 - Installable PWA foundation with app manifest, original vector icon, safe offline app-shell caching, and Cloudflare Pages SPA fallback/security headers.
 - Responsive game presentation foundation with a landscape-first match HUD, scalable board, dice controls, compact mobile top bar, and slide-over chat/crew/hangout panels.
 - Cloudflare Worker API with CORS and health-check routes.
-- `LudoRoom` Durable Object: room persistence, serialized actions, game rules, computer turns, public/private chat, call signaling and bounded replay snapshots.
+- `LudoRoom` Durable Object: room persistence, serialized actions, game rules, computer turns, public/private chat with rate limits and block checks, call signaling and bounded replay snapshots recorded on game-state changes.
 - `RealtimeHub` Durable Object: WebSocket connections, subscriptions and entity-update broadcasts.
-- `MatchmakingLobby` Durable Object: quick 1v1 pairing, status polling, cancellation and queue expiry.
+- `MatchmakingLobby` Durable Object: quick 1v1 pairing, status polling, cancellation, queue expiry, blocked-player avoidance and per-account retry throttling.
 - `AppData` Durable Object: tournament creation/join/start/result reporting, global leaderboard, player summaries, block/report records, and a disconnected integration manifest.
 - Completed games are copied into persistent match-result storage; replay snapshots remain available through the room replay endpoint.
 
