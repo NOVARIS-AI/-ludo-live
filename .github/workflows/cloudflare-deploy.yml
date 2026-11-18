@@ -132,3 +132,22 @@ jobs:
         run: |
           if [[ "$TARGET" == "production" ]]; then PAGES_PROJECT="ludo-live"; else PAGES_PROJECT="ludo-live-staging"; fi
           npx wrangler pages deploy dist --project-name="$PAGES_PROJECT" --branch=main
+      - name: Smoke-test deployed frontend and Worker
+        env:
+          TARGET: ${{ inputs.target }}
+          PROD_PAGES_ORIGIN: ${{ secrets.LUDO_LIVE_PAGES_ORIGIN }}
+          STAGE_PAGES_ORIGIN: ${{ secrets.LUDO_STAGING_PAGES_ORIGIN }}
+          PROD_WORKER_API_URL: ${{ secrets.LUDO_LIVE_WORKER_API_URL }}
+          STAGE_WORKER_API_URL: ${{ secrets.LUDO_STAGING_WORKER_API_URL }}
+        run: |
+          if [[ "$TARGET" == "production" ]]; then
+            PAGES_ORIGIN="$PROD_PAGES_ORIGIN"; WORKER_API_URL="$PROD_WORKER_API_URL"
+          else
+            PAGES_ORIGIN="$STAGE_PAGES_ORIGIN"; WORKER_API_URL="$STAGE_WORKER_API_URL"
+          fi
+          echo "Checking Pages: $PAGES_ORIGIN"
+          curl --fail --silent --show-error --location --retry 10 --retry-all-errors --retry-delay 3 --max-time 30 "$PAGES_ORIGIN/" -o /tmp/ludo-pages.html
+          grep -qi "Ludo Live" /tmp/ludo-pages.html
+          echo "Checking Worker health: $WORKER_API_URL"
+          curl --fail --silent --show-error --location --retry 10 --retry-all-errors --retry-delay 3 --max-time 20 "$WORKER_API_URL/api/_healthcheck" -o /tmp/ludo-health.json
+          grep -q '"platform":"cloudflare-workers"' /tmp/ludo-health.json
