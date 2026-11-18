@@ -639,8 +639,8 @@ export default {
           const roomResponse = await roomStub.fetch("https://room/read");
           if (!roomResponse.ok) return withCors(fail("Room not found.", 404), origin);
           const roomPayload = await roomResponse.json<any>();
-          if (!(roomPayload.room?.callParticipants || []).includes(authenticatedUser!.id)) {
-            return withCors(fail("Join the room call before receiving call signals.", 403), origin);
+          if (!(roomPayload.room?.players || []).some((player: any) => player.id === authenticatedUser!.id)) {
+            return withCors(fail("Only players in this room can receive call signals.", 403), origin);
           }
         }
         const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
