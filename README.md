@@ -9,14 +9,14 @@ This repository preserves the last successful AppDeploy source snapshot and the 
 - Cloudflare Worker API with CORS and health-check routes.
 - `LudoRoom` Durable Object: room persistence, serialized actions, game rules, computer turns, public/private chat with rate limits and block checks, call signaling and bounded replay snapshots recorded on game-state changes.
 - `RealtimeHub` Durable Object: WebSocket connections, subscriptions and entity-update broadcasts.
-- `MatchmakingLobby` Durable Object: quick 1v1 pairing, status polling, cancellation, queue expiry, blocked-player avoidance and per-account retry throttling.
+- `MatchmakingLobby` Durable Object: quick 1v1 pairing, status polling, cancellation, queue expiry, blocked-player avoidance and atomically enforced per-account retry throttling.
 - `AppData` Durable Object: tournament creation/join/start/result reporting, global leaderboard, player summaries, block/report records, and a disconnected integration manifest.
 - Completed games are copied into persistent match-result storage; replay snapshots remain available through the room replay endpoint.
 
 ## Release status and remaining requirements
 The standalone app now has email/password accounts, PBKDF2 password hashing, expiring bearer sessions, server-owned player IDs and display names, login throttling, authenticated room actions, authenticated matchmaking identity, and short-lived single-use WebSocket tickets. Public/private room chat has server-side rate limits. Call signaling subscriptions are restricted to players who have joined that room's call, and realtime subscription changes are bound to the authenticated socket owner.
 
-This is still **staging-ready work, not a production launch**. Email ownership verification and password recovery are not implemented because no email-delivery provider is configured. A TURN relay is still required for reliable WebRTC calls across restrictive networks. Reports are stored, but a staffed moderation and appeal workflow is not included. Blocking is persisted and enforced for new friend requests, private-message send/history, room joins and matchmaking; blocked public-chat messages are filtered from the game chat UI. A complete moderation and appeal workflow is still outstanding. Automated end-to-end multiplayer tests, abuse monitoring, accessibility review and real-device QA remain required.
+This is still **staging-ready work, not a production launch**. Email ownership verification and password recovery are not implemented because no email-delivery provider is configured. A TURN relay is still required for reliable WebRTC calls across restrictive networks. Reports are stored, but a staffed moderation and appeal workflow is not included. Blocking is persisted and enforced for new friend requests, private-message send/history, room joins and matchmaking; blocked public-chat messages are filtered from the game chat UI. A 120-second server-side reconnect grace period now preserves a disconnected player's seat; reconnecting clears the expiry alarm, while players who do not return are removed when the Durable Object alarm fires. Automated end-to-end multiplayer tests, abuse monitoring, accessibility review and real-device QA remain required.
 
 The AppDeploy production app remains live and untouched. Cloudflare deployment is manual and requires account secrets and staging validation. No secrets, environment values or user records are committed. Cross-app integrations remain disconnected by design.
 
@@ -27,7 +27,7 @@ The AppDeploy production app remains live and untouched. Cloudflare deployment i
 3. Set the Pages build variable `VITE_API_BASE_URL` to the deployed Worker HTTPS origin and `VITE_REALTIME_URL` to its `wss://` `/connect` endpoint.
 4. Keep preview origins out of the production allowlist unless they are intentionally trusted. The checked-in localhost value is for local development only.
 5. Configure and verify the account system, exact origin allowlist, session expiry/revocation, room authorization and realtime ticket flow. CORS is not authentication.
-6. Verify room creation/join/turns, quick matchmaking, reconnect behavior, tournaments, chat, moderation and replay with at least two real devices before switching away from the existing AppDeploy app.
+6. Verify room creation/join/turns, quick matchmaking and its retry limit, a dropped WebSocket followed by reconnect before 120 seconds, expiry after 120 seconds, tournaments, chat, moderation and replay with at least two real devices before switching away from the existing AppDeploy app.
 
 The CI workflow builds the frontend, runs TypeScript checks, dry-runs the Worker bundle and retains the Pages `dist/` artifact. It does not deploy automatically. A separate manual workflow is prepared in `.github/workflows/cloudflare-deploy.yml`; it requires Cloudflare secrets and an explicit `LUDO_AUTH_READY=true` release gate. See `CLOUDFLARE_DEPLOYMENT.md` for the setup and rollout sequence.
 
