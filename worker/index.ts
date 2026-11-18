@@ -92,6 +92,18 @@ export class LudoRoom {
     if (!room) throw Object.assign(new Error("Room not found."), { status: 404 });
     return room;
   }
+  private async checkChatRate(playerId: string) {
+    const key = "chat-rate:" + playerId;
+    const now = Date.now();
+    const state = await this.state.storage.get<{ recent: number[]; last: number }>(key) || { recent: [], last: 0 };
+    const recent = state.recent.filter(at => at > now - 10_000);
+    if (now - state.last < 900 || recent.length >= 8) {
+      return false;
+    }
+    recent.push(now);
+    await this.state.storage.put(key, { recent, last: now });
+    return true;
+  }
   private async broadcast(type: string, id: string, data: unknown) {
     const hub = this.env.REALTIME_HUB.get(this.env.REALTIME_HUB.idFromName("global"));
     await hub.fetch("https://hub/broadcast", { method: "POST", body: JSON.stringify({ v: 1, type: "entity.update", payload: { entity_type: type, entity_id: id, data } }) });
@@ -222,6 +234,7 @@ export class LudoRoom {
     if (action === "chat") {
       const index = requirePlayer(room, playerId), text = clean(input.text, 140);
       if (!text) return fail("Write a message first.");
+      if (!await this.checkChatRate(playerId)) return fail("You're sending messages too quickly. Please wait a moment.", 429);
       const player = room.players[index];
       room.messages.push({ id: crypto.randomUUID(), playerId, name: player.name, color: player.color, text, kind: input.kind === "reaction" ? "reaction" : "chat", createdAt: Date.now() });
       room.messages = room.messages.slice(-40);
@@ -237,6 +250,7 @@ export class LudoRoom {
       if (action === "private-chat/list") return json({ messages: messages.slice(-40) });
       const text = clean(input.text, 140);
       if (!text) return fail("Write a message first.");
+      if (!await this.checkChatRate(playerId)) return fail("You're sending messages too quickly. Please wait a moment.", 429);
       const sender = room.players.find(p => p.id === playerId)!;
       const message = { id: crypto.randomUUID(), playerId, name: sender.name, color: sender.color, text, kind: "chat", createdAt: Date.now(), recipientId: peerId };
       messages.push(message); await this.state.storage.put(key, messages.slice(-80));
