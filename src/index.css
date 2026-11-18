@@ -427,3 +427,62 @@ a {
   .turn-controls{min-height:46px}
   .dice-face{width:36px;height:36px}
 }
+
+
+/* Focused in-game panels: one destination at a time, never a stacked sidebar. */
+.game-layout .side-column>.side-card,
+.game-layout .side-column>.fair-play-note{display:none}
+.game-layout.panel-chat-open .side-column>.chat-card,
+.game-layout.panel-crew-open .side-column>.players-card,
+.game-layout.panel-hangout-open .side-column>.call-card{display:flex}
+.game-layout.panel-chat-open .side-column>.chat-card,
+.game-layout.panel-crew-open .side-column>.players-card,
+.game-layout.panel-hangout-open .side-column>.call-card{flex-direction:column;min-height:0;height:100%;overflow:hidden}
+.game-layout.panel-chat-open .side-column,
+.game-layout.panel-crew-open .side-column,
+.game-layout.panel-hangout-open .side-column{min-width:0;min-height:0;padding:14px;border:1px solid rgba(185,154,255,.18);border-radius:20px;background:linear-gradient(155deg,rgba(31,26,47,.98),rgba(13,16,27,.98));box-shadow:0 18px 55px rgba(0,0,0,.3)}
+.game-layout.panel-chat-open .chat-feed{flex:1;min-height:100px;max-height:none}
+.game-layout.panel-chat-open .chat-form{flex:none}
+.game-layout.panel-chat-open .chat-mode-switch{flex:none}
+.game-layout.panel-crew-open .player-list{flex:1;min-height:0;overflow:auto}
+.game-layout.panel-crew-open .player-row{padding:12px 9px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:rgba(255,255,255,.025);margin:6px 0}
+.game-layout.panel-hangout-open .call-card{gap:13px}
+.game-layout.panel-hangout-open .call-description{max-width:42ch;line-height:1.6}
+.game-layout.panel-hangout-open .call-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-height:160px}
+.game-layout.panel-hangout-open .media-tile,
+.game-layout.panel-hangout-open .call-peer-waiting{min-height:150px;border:1px solid rgba(255,255,255,.1);border-radius:16px;background:radial-gradient(circle at 50% 25%,#4a376d,#211b31 68%)}
+.game-layout.panel-hangout-open .media-avatar{width:58px;height:58px;font-size:21px}
+.game-layout.panel-hangout-open .call-actions{display:flex;flex-wrap:wrap;gap:9px}
+.game-layout.panel-hangout-open .call-action{min-height:43px;border-radius:13px}
+.game-layout.panel-hangout-open .call-actions-bottom{margin-top:auto;padding-top:12px;border-top:1px solid rgba(255,255,255,.09)}
+.game-layout.panel-hangout-open .call-presence{align-self:flex-start;padding:8px 11px;border-radius:99px;background:rgba(74,222,128,.09)}
+.game-topbar{gap:9px}
+.game-topbar>button{min-height:40px;border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.035);border-radius:12px}
+.game-topbar>button.active{border-color:rgba(184,156,255,.65);background:rgba(137,101,205,.2);box-shadow:0 0 0 2px rgba(167,139,250,.09)}
+.game-topbar .brand{margin-inline:auto}
+.game-top-actions{flex:none}
+@media(max-width:760px){
+ .game-layout.panel-chat-open .side-column,
+ .game-layout.panel-crew-open .side-column,
+ .game-layout.panel-hangout-open .side-column{inset:62px 7px 7px;padding:12px;display:flex}
+ .game-layout.panel-chat-open .side-column>.chat-card,
+ .game-layout.panel-crew-open .side-column>.players-card,
+ .game-layout.panel-hangout-open .side-column>.call-card{display:flex}
+ .game-layout.panel-chat-open .side-column>.call-card,
+ .game-layout.panel-chat-open .side-column>.players-card,
+ .game-layout.panel-chat-open .side-column>.fair-play-note,
+ .game-layout.panel-crew-open .side-column>.call-card,
+ .game-layout.panel-crew-open .side-column>.chat-card,
+ .game-layout.panel-crew-open .side-column>.fair-play-note,
+ .game-layout.panel-hangout-open .side-column>.players-card,
+ .game-layout.panel-hangout-open .side-column>.chat-card,
+ .game-layout.panel-hangout-open .side-column>.fair-play-note{display:none}
+ .game-layout.panel-hangout-open .call-grid{grid-template-columns:repeat(2,minmax(0,1fr));min-height:120px}
+ .game-layout.panel-hangout-open .media-tile,
+ .game-layout.panel-hangout-open .call-peer-waiting{min-height:125px}
+ .game-topbar{gap:5px}
+ .game-topbar>button{min-height:36px;padding:7px;border-radius:11px}
+ .game-topbar .brand{display:none}
+ .game-topbar .room-chip{margin-left:auto}
+ .game-layout.panel-chat-open .chat-feed{max-height:none}
+}
