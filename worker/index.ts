@@ -14,6 +14,7 @@ type Room = {
   messages: Array<{ id: string; playerId: string; name: string; color: string; text: string; kind: string; createdAt: number }>;
   callParticipants: string[]; version: number; createdAt: number; lastActivity: number;
   replaySnapshots: Array<{ version: number; at: number; turnMessage: string; currentTurnIndex: number; dice: number | null; tokens: Record<string, number[]>; winner: string | null; winnerTeam?: string | null }>;
+  disconnectedAt?: Record<string, number>;
 };
 const colors = ["red", "blue", "yellow", "green"];
 const starts: Record<string, number> = { red: 1, blue: 14, yellow: 27, green: 40 };
@@ -77,6 +78,30 @@ export class LudoRoom {
         await this.state.storage.put("room", room);
         return json({ room });
       }
+      if (url.pathname === "/presence/disconnect" && request.method === "POST") {
+        const { playerId } = await request.json<{ playerId: string }>();
+        const room = await this.getRoom();
+        if (!room.players.some(player => player.id === playerId)) return json({ ok: true, ignored: true });
+        room.disconnectedAt = { ...(room.disconnectedAt || {}), [playerId]: Date.now() };
+        await this.state.storage.put("room", room);
+        const pending = Object.values(room.disconnectedAt);
+        if (pending.length) await this.state.storage.setAlarm(Math.min(...pending) + 120_000);
+        await this.broadcast("room", room.code, { presence: { playerId, online: false, graceSeconds: 120 } });
+        return json({ ok: true });
+      }
+      if (url.pathname === "/presence/reconnect" && request.method === "POST") {
+        const { playerId } = await request.json<{ playerId: string }>();
+        const room = await this.getRoom();
+        if (!room.players.some(player => player.id === playerId)) return fail("You are not a player in this room.", 403);
+        if (room.disconnectedAt?.[playerId]) {
+          delete room.disconnectedAt[playerId];
+          if (!Object.keys(room.disconnectedAt).length) { delete room.disconnectedAt; await this.state.storage.deleteAlarm(); }
+          else await this.state.storage.setAlarm(Math.min(...Object.values(room.disconnectedAt)) + 120_000);
+          await this.state.storage.put("room", room);
+        }
+        await this.broadcast("room", room.code, { presence: { playerId, online: true } });
+        return json({ ok: true });
+      }
       if (url.pathname === "/read") {
         const room = await this.state.storage.get<Room>("room");
         if (!room) return fail("Room not found. Check the code and try again.", 404);
@@ -86,6 +111,39 @@ export class LudoRoom {
       if (url.pathname === "/action" && request.method === "POST") return this.action(await request.json<{ action: string; input: Record<string, unknown> }>());
       return fail("Not found.", 404);
     } catch (error) { return fail(error instanceof Error ? error.message : "Unexpected error.", Number((error as any)?.status) || 500); }
+  }
+  async alarm() {
+    const room = await this.state.storage.get<Room>("room");
+    if (!room?.disconnectedAt) return;
+    const now = Date.now();
+    const expired = Object.entries(room.disconnectedAt).filter(([, at]) => now - at >= 120_000).map(([id]) => id);
+    if (!expired.length) {
+      const next = Math.min(...Object.values(room.disconnectedAt)) + 120_000;
+      await this.state.storage.setAlarm(next);
+      return;
+    }
+    const beforeState = JSON.stringify([room.state, room.status]);
+    const removedIndexes = expired.map(id => room.players.findIndex(player => player.id === id)).filter(index => index >= 0).sort((a,b) => b-a);
+    for (const id of expired) {
+      room.players = room.players.filter(player => player.id !== id);
+      room.callParticipants = room.callParticipants.filter(playerId => playerId !== id);
+      delete room.state.tokens[id];
+      delete room.disconnectedAt[id];
+    }
+    if (!room.players.length) {
+      await this.state.storage.deleteAll();
+      await this.broadcast("room", room.code, { room: null, closed: true });
+      return;
+    }
+    const removedBeforeTurn = removedIndexes.filter(index => index < room.state.currentTurnIndex).length;
+    room.state.currentTurnIndex = Math.max(0, Math.min(room.players.length - 1, room.state.currentTurnIndex - removedBeforeTurn));
+    if (removedIndexes.includes(room.state.currentTurnIndex)) room.state.currentTurnIndex %= room.players.length;
+    if (!room.players.some(player => player.host)) room.players[0].host = true;
+    room.state.turnMessage = expired.length === 1 ? "A disconnected player did not return within 2 minutes and left the match." : "Disconnected players did not return within 2 minutes and left the match.";
+    if (room.disconnectedAt && !Object.keys(room.disconnectedAt).length) delete room.disconnectedAt;
+    await this.save(room, beforeState);
+    if (room.disconnectedAt) await this.state.storage.setAlarm(Math.min(...Object.values(room.disconnectedAt)) + 120_000);
+    else await this.state.storage.deleteAlarm();
   }
   private async getRoom() {
     const room = await this.state.storage.get<Room>("room");
@@ -310,10 +368,14 @@ export class MatchmakingLobby {
       if (active) return json({ status: "waiting", queueId: active.queueId });
       const now = Date.now();
       const rateKey = "queue-rate:" + playerId;
-      const recentJoins = (await this.state.storage.get<number[]>(rateKey) || []).filter(at => at > now - 60_000);
-      if (recentJoins.length >= 5) return fail("Too many matchmaking attempts. Wait a minute before searching again.",429);
-      recentJoins.push(now);
-      await this.state.storage.put(rateKey,recentJoins);
+      const allowed = await this.state.storage.transaction(async txn => {
+        const recentJoins = (await txn.get<number[]>(rateKey) || []).filter(at => at > now - 60_000);
+        if (recentJoins.length >= 5) return false;
+        recentJoins.push(now);
+        await txn.put(rateKey, recentJoins);
+        return true;
+      });
+      if (!allowed) return fail("Too many matchmaking attempts. Wait a minute before searching again.",429);
       let opponent: QueueEntry | undefined;
       const data = this.env.APP_DATA.get(this.env.APP_DATA.idFromName("global"));
       for (const candidate of entries) {
@@ -605,7 +667,7 @@ export class AppData {
 }
 
 export class RealtimeHub {
-  constructor(private state: DurableObjectState) {}
+  constructor(private state: DurableObjectState, private env: Env) {}
   async fetch(request: Request) {
     const url = new URL(request.url);
     if (url.pathname === "/connect") {
@@ -643,6 +705,22 @@ export class RealtimeHub {
     }
     return fail("Not found.", 404);
   }
+  async webSocketClose(socket: WebSocket) {
+    const meta = socket.deserializeAttachment() as any;
+    if (!meta?.userId || !Array.isArray(meta.subscriptions)) return;
+    for (const subscription of meta.subscriptions) {
+      if (subscription.type !== "room" || !/^[A-Z0-9]{6}$/.test(subscription.id)) continue;
+      const anotherLiveSocket = this.state.getWebSockets().some(other => {
+        if (other === socket) return false;
+        const otherMeta = other.deserializeAttachment() as any;
+        return otherMeta?.userId === meta.userId && otherMeta?.subscriptions?.some((item: any) => item.type === "room" && item.id === subscription.id);
+      });
+      if (anotherLiveSocket) continue;
+      const room = this.env.LUDO_ROOMS.get(this.env.LUDO_ROOMS.idFromName(subscription.id));
+      await room.fetch("https://room/presence/disconnect", { method: "POST", body: JSON.stringify({ playerId: meta.userId }) });
+    }
+  }
+  async webSocketError(socket: WebSocket) { await this.webSocketClose(socket); }
 }
 function withCors(response: Response, origin: string) {
   const headers = new Headers(response.headers);
@@ -725,10 +803,15 @@ export default {
           }
         }
         const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
-        return withCors(await hub.fetch("https://hub/" + (removing ? "unsubscribe" : "subscribe"), {
+        const hubResponse = await hub.fetch("https://hub/" + (removing ? "unsubscribe" : "subscribe"), {
           method: "POST",
           body: JSON.stringify({ ...body, user_id: authenticatedUser!.id, entity_type: entityType, entity_id: entityId })
-        }), origin);
+        });
+        if (hubResponse.ok && !removing && entityType === "room" && /^[A-Z0-9]{6}$/.test(entityId)) {
+          const roomStub = env.LUDO_ROOMS.get(env.LUDO_ROOMS.idFromName(entityId));
+          await roomStub.fetch("https://room/presence/reconnect", { method: "POST", body: JSON.stringify({ playerId: authenticatedUser!.id }) });
+        }
+        return withCors(hubResponse, origin);
       }
       if (url.pathname === "/api/rooms" || url.pathname === "/api/rooms/computer") {
         if (request.method !== "POST") return withCors(fail("Method not allowed.", 405), origin);
