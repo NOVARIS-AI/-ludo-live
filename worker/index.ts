@@ -123,7 +123,9 @@ export class LudoRoom {
       return;
     }
     const beforeState = JSON.stringify([room.state, room.status]);
-    const removedIndexes = expired.map(id => room.players.findIndex(player => player.id === id)).filter(index => index >= 0).sort((a,b) => b-a);
+    const originalTurnIndex = room.state.currentTurnIndex;
+    const currentPlayerId = room.players[originalTurnIndex]?.id;
+    const removedIndexes = expired.map(id => room.players.findIndex(player => player.id === id)).filter(index => index >= 0);
     for (const id of expired) {
       room.players = room.players.filter(player => player.id !== id);
       room.callParticipants = room.callParticipants.filter(playerId => playerId !== id);
@@ -135,9 +137,10 @@ export class LudoRoom {
       await this.broadcast("room", room.code, { room: null, closed: true });
       return;
     }
-    const removedBeforeTurn = removedIndexes.filter(index => index < room.state.currentTurnIndex).length;
-    room.state.currentTurnIndex = Math.max(0, Math.min(room.players.length - 1, room.state.currentTurnIndex - removedBeforeTurn));
-    if (removedIndexes.includes(room.state.currentTurnIndex)) room.state.currentTurnIndex %= room.players.length;
+    const survivingTurnIndex = room.players.findIndex(player => player.id === currentPlayerId);
+    room.state.currentTurnIndex = survivingTurnIndex >= 0
+      ? survivingTurnIndex
+      : Math.max(0, originalTurnIndex - removedIndexes.filter(index => index <= originalTurnIndex).length) % room.players.length;
     if (!room.players.some(player => player.host)) room.players[0].host = true;
     room.state.turnMessage = expired.length === 1 ? "A disconnected player did not return within 2 minutes and left the match." : "Disconnected players did not return within 2 minutes and left the match.";
     if (room.disconnectedAt && !Object.keys(room.disconnectedAt).length) delete room.disconnectedAt;
