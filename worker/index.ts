@@ -379,11 +379,14 @@ export class AppData {
       }
       if(path==="/auth/login"&&method==="POST") {
         const input=await request.json<any>(),email=clean(input.email,254).toLowerCase(),password=typeof input.password==="string"?input.password:"";
-        const attempts=await this.list<any>("loginAttempts"),recent=attempts.filter(a=>a.email===email&&a.at>Date.now()-15*60*1000);
-        if(recent.length>=8)return fail("Too many sign-in attempts. Try again in 15 minutes.",429);
+        const now=Date.now(),ip=clean(request.headers.get("cf-connecting-ip"),64)||"unknown";
+        const attempts=await this.list<any>("loginAttempts"),recent=attempts.filter(a=>a.at>now-15*60*1000);
+        const emailAttempts=recent.filter(a=>a.email===email).length;
+        const ipAttempts=ip==="unknown"?0:recent.filter(a=>a.ip===ip).length;
+        if(emailAttempts>=8||ipAttempts>=30)return fail("Too many sign-in attempts. Try again in 15 minutes.",429);
         const users=await this.list<any>("users"),user=users.find(u=>u.email===email);
         const candidate=user?await this.passwordHash(password,user.salt):"";
-        if(!user||candidate!==user.passwordHash){attempts.push({email,at:Date.now()});await this.save("loginAttempts",attempts.slice(-5000));return fail("Email or password is incorrect.",401);}
+        if(!user||candidate!==user.passwordHash){attempts.push({email,ip,at:now});await this.save("loginAttempts",attempts.filter(a=>a.at>now-24*60*60*1000).slice(-10000));return fail("Email or password is incorrect.",401);}
         await this.save("loginAttempts",attempts.filter(a=>a.email!==email));
         const token=this.token(),sessions=await this.list<any>("sessions");
         sessions.push({tokenHash:await this.digest(token),userId:user.id,createdAt:Date.now(),expiresAt:Date.now()+30*24*60*60*1000});
