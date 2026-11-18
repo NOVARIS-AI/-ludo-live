@@ -251,7 +251,7 @@ export class LudoRoom {
       requirePlayer(room, playerId); requirePlayer(room, peerId);
       const peer = room.players.find(p => p.id === peerId);
       if (peerId === playerId || peer?.isBot) return fail("Choose another human player for private chat.");
-      if (action === "private-chat" && await this.isBlocked(playerId, peerId)) return fail("Messaging is unavailable between these accounts.", 403);
+      if (await this.isBlocked(playerId, peerId)) return fail("Messaging is unavailable between these accounts.", 403);
       const key = "dm:" + [playerId, peerId].sort().join(":");
       const messages = await this.state.storage.get<any[]>(key) || [];
       if (action === "private-chat/list") return json({ messages: messages.slice(-40) });
