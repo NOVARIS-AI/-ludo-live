@@ -464,11 +464,29 @@ export class AppData {
         const input=await request.json<any>(), email=clean(input.email,254).toLowerCase(), name=nameOf(input.name), password=typeof input.password==="string"?input.password:"";
         if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return fail("Enter a valid email address.");
         if(password.length<10||password.length>128||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password))return fail("Use a password with at least 10 characters, including letters and numbers.");
-        const users=await this.list<any>("users");
-        if(users.some(u=>u.email===email))return fail("An account with this email already exists.",409);
+        const now=Date.now();
+        const ip=clean(request.headers.get("cf-connecting-ip"),64)||"unknown";
+        const allowed=await this.state.storage.transaction(async txn=>{
+          const attempts=await txn.get<any[]>("registrationAttempts")||[];
+          const recent=attempts.filter(a=>a.at>now-60*60*1000);
+          const emailCount=recent.filter(a=>a.email===email).length;
+          const ipCount=ip==="unknown"?0:recent.filter(a=>a.ip===ip).length;
+          if(emailCount>=3||ipCount>=8)return false;
+          recent.push({email,ip,at:now});
+          await txn.put("registrationAttempts",recent.slice(-5000));
+          return true;
+        });
+        if(!allowed)return fail("Too many account creation attempts. Please try again in an hour.",429);
         const salt=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,"0")).join("");
-        const user={id:"p_"+crypto.randomUUID(),name,email,salt,passwordHash:await this.passwordHash(password,salt),createdAt:Date.now()};
-        users.push(user);await this.save("users",users.slice(-10000));
+        const user={id:"p_"+crypto.randomUUID(),name,email,salt,passwordHash:await this.passwordHash(password,salt),createdAt:now};
+        const created=await this.state.storage.transaction(async txn=>{
+          const users=await txn.get<any[]>("users")||[];
+          if(users.some(u=>u.email===email))return false;
+          users.push(user);
+          await txn.put("users",users.slice(-10000));
+          return true;
+        });
+        if(!created)return fail("An account with this email already exists.",409);
         const token=this.token(),sessions=await this.list<any>("sessions");
         sessions.push({tokenHash:await this.digest(token),userId:user.id,createdAt:Date.now(),expiresAt:Date.now()+30*24*60*60*1000});
         await this.save("sessions",sessions.slice(-20000));
