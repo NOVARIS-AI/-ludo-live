@@ -13,10 +13,12 @@ This repository preserves the last successful AppDeploy source snapshot and the 
 - `AppData` Durable Object: tournament creation/join/start/result reporting, global leaderboard, player summaries, block/report records, and a disconnected integration manifest.
 - Completed games are copied into persistent match-result storage; replay snapshots remain available through the room replay endpoint.
 
-## Important limitations
-This is **not production-ready and has not been deployed**. The current player ID is a client-generated guest identifier, not an authenticated identity. Do not expose this Worker publicly until authentication/authorization, rate limits, abuse controls and an exact allowed origin are configured. Reports are stored for future moderation; a staffed moderation workflow is not included. Block records are persisted and returned to the client, but are not a complete safety system. WebRTC signaling is present, but a TURN relay is still needed for reliable calls across restrictive networks.
+## Release status and remaining requirements
+The standalone app now has email/password accounts, PBKDF2 password hashing, expiring bearer sessions, server-owned player IDs and display names, login throttling, authenticated room actions, authenticated matchmaking identity, and short-lived single-use WebSocket tickets. Public/private room chat has server-side rate limits. Call signaling subscriptions are restricted to players who have joined that room's call, and realtime subscription changes are bound to the authenticated socket owner.
 
-The UI styles and layout have been added in source, but device-by-device visual QA and end-to-end multiplayer tests are still required. The AppDeploy production app remains live and untouched while this replacement is built and tested. Original AppDeploy backend files remain as historical reference. No secrets, environment values or user records are committed. Cross-app integrations remain disconnected.
+This is still **staging-ready work, not a production launch**. Email ownership verification and password recovery are not implemented because no email-delivery provider is configured. A TURN relay is still required for reliable WebRTC calls across restrictive networks. Reports are stored, but a staffed moderation and appeal workflow is not included. Blocking is persisted, but needs end-to-end enforcement across matchmaking, room invitations and messaging. Automated end-to-end multiplayer tests, abuse monitoring, accessibility review and real-device QA remain required.
+
+The AppDeploy production app remains live and untouched. Cloudflare deployment is manual and requires account secrets and staging validation. No secrets, environment values or user records are committed. Cross-app integrations remain disconnected by design.
 
 ## Cloudflare Pages and Worker setup
 
@@ -24,7 +26,7 @@ The UI styles and layout have been added in source, but device-by-device visual 
 2. Create a Cloudflare Worker using `wrangler.toml` and deploy `worker/index.ts` only after configuring the production Pages origin in the Worker `ALLOWED_ORIGIN` variable.
 3. Set the Pages build variable `VITE_API_BASE_URL` to the deployed Worker HTTPS origin and `VITE_REALTIME_URL` to its `wss://` `/connect` endpoint.
 4. Keep preview origins out of the production allowlist unless they are intentionally trusted. The checked-in localhost value is for local development only.
-5. Configure a durable guest/player identity and server-side authorization before public release. Current player IDs are client-generated and are not authenticated; CORS is not authentication.
+5. Configure and verify the account system, exact origin allowlist, session expiry/revocation, room authorization and realtime ticket flow. CORS is not authentication.
 6. Verify room creation/join/turns, quick matchmaking, reconnect behavior, tournaments, chat, moderation and replay with at least two real devices before switching away from the existing AppDeploy app.
 
 The CI workflow builds the frontend, runs TypeScript checks, dry-runs the Worker bundle and retains the Pages `dist/` artifact. It does not deploy automatically. A separate manual workflow is prepared in `.github/workflows/cloudflare-deploy.yml`; it requires Cloudflare secrets and an explicit `LUDO_AUTH_READY=true` release gate. See `CLOUDFLARE_DEPLOYMENT.md` for the setup and rollout sequence.
