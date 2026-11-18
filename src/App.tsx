@@ -521,7 +521,7 @@ export default function App() {
       connection.disconnect();
       connectionRef.current = null;
     };
-  }, []);
+  }, [authUser?.id, playerId]);
 
   useEffect(() => {
     api.get('/api/players/' + encodeURIComponent(playerId) + '/blocked')
