@@ -157,7 +157,7 @@ export class LudoRoom {
       if (room.gameMode === "duo" && room.players.length !== 4) return fail("2v2 needs all four players.");
       if (room.players.length < 2 && room.mode !== "computer") return fail("Invite at least one more player.");
       room.status = "playing"; room.state = newState(room.players, room.players[0].name + " goes first. Roll the dice!");
-      return this.save(room);
+      return this.save(room, beforeState);
     }
     if (action === "roll") {
       const index = requirePlayer(room, playerId);
@@ -173,7 +173,7 @@ export class LudoRoom {
         room.state.dice = dice; room.state.consecutiveSixes = dice === 6 ? room.state.consecutiveSixes + 1 : 0;
         room.state.turnMessage = room.players[index].name + " rolled a " + dice + ".";
       }
-      return this.save(room);
+      return this.save(room, beforeState);
     }
     if (action === "move") {
       const index = requirePlayer(room, playerId);
@@ -193,7 +193,7 @@ export class LudoRoom {
         room.state.dice = null; room.state.currentTurnIndex = nextPlayer(room, index);
         room.state.turnMessage = room.players[room.state.currentTurnIndex].name + " is up next.";
       }
-      return this.save(room);
+      return this.save(room, beforeState);
     }
     if (action === "pass") {
       const index = requirePlayer(room, playerId), dice = room.state.dice;
@@ -201,7 +201,7 @@ export class LudoRoom {
       if (validMoves(room, playerId, dice).length) return fail("You still have a legal move.");
       room.state.dice = null; room.state.consecutiveSixes = 0; room.state.currentTurnIndex = nextPlayer(room, index);
       room.state.turnMessage = "No legal move. " + room.players[room.state.currentTurnIndex].name + " is up next.";
-      return this.save(room);
+      return this.save(room, beforeState);
     }
     if (action === "bot/turn") {
       const expected = Number(input.expectedActionVersion || 0);
@@ -235,7 +235,7 @@ export class LudoRoom {
           }
         }
       }
-      return this.save(room);
+      return this.save(room, beforeState);
     }
     if (action === "chat") {
       const index = requirePlayer(room, playerId), text = clean(input.text, 140);
@@ -244,7 +244,7 @@ export class LudoRoom {
       const player = room.players[index];
       room.messages.push({ id: crypto.randomUUID(), playerId, name: player.name, color: player.color, text, kind: input.kind === "reaction" ? "reaction" : "chat", createdAt: Date.now() });
       room.messages = room.messages.slice(-40);
-      return this.save(room);
+      return this.save(room, beforeState);
     }
     if (action === "private-chat" || action === "private-chat/list") {
       const peerId = clean(action === "private-chat" ? input.toPlayerId : input.peerId);
@@ -277,7 +277,7 @@ export class LudoRoom {
     if (action === "call/join" || action === "call/leave") {
       requirePlayer(room, playerId);
       room.callParticipants = action === "call/join" ? Array.from(new Set([...room.callParticipants, playerId])) : room.callParticipants.filter(id => id !== playerId);
-      return this.save(room);
+      return this.save(room, beforeState);
     }
     if (action === "leave") {
       const index = requirePlayer(room, playerId);
@@ -289,7 +289,7 @@ export class LudoRoom {
       else if (index === room.state.currentTurnIndex) room.state.currentTurnIndex %= room.players.length;
       if (!room.players.some(p => p.host)) room.players[0].host = true;
       room.state.turnMessage = "A player left the room.";
-      return this.save(room);
+      return this.save(room, beforeState);
     }
     return fail("This action is not migrated yet.", 501);
   }
@@ -309,6 +309,11 @@ export class MatchmakingLobby {
       const active = entries.find(e => e.playerId === playerId && e.status === "waiting");
       if (active) return json({ status: "waiting", queueId: active.queueId });
       const now = Date.now();
+      const rateKey = "queue-rate:" + playerId;
+      const recentJoins = (await this.state.storage.get<number[]>(rateKey) || []).filter(at => at > now - 60_000);
+      if (recentJoins.length >= 5) return fail("Too many matchmaking attempts. Wait a minute before searching again.",429);
+      recentJoins.push(now);
+      await this.state.storage.put(rateKey,recentJoins);
       let opponent: QueueEntry | undefined;
       const data = this.env.APP_DATA.get(this.env.APP_DATA.idFromName("global"));
       for (const candidate of entries) {
