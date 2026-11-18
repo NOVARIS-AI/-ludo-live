@@ -418,6 +418,25 @@ export class AppData {
         await this.save("sessions",sessions.filter(s=>s.tokenHash!==hash));
         return json({ok:true});
       }
+      if(path==="/auth/realtime-ticket"&&method==="POST") {
+        const token=(request.headers.get("authorization")||"").replace(/^Bearer\\s+/i,"");
+        const user=token?await this.session(token):null;
+        if(!user)return fail("Authentication required.",401);
+        const ticket=this.token(),tickets=await this.list<any>("realtimeTickets"),now=Date.now();
+        tickets.push({hash:await this.digest(ticket),userId:user.id,expiresAt:now+60_000});
+        await this.save("realtimeTickets",tickets.filter(t=>t.expiresAt>now).slice(-5000));
+        return json({ticket,expiresIn:60});
+      }
+      if(path==="/auth/consume-realtime-ticket"&&method==="POST") {
+        const ticket=clean((await request.json<any>()).ticket,200);
+        if(!ticket)return fail("Realtime ticket required.",401);
+        const hash=await this.digest(ticket),tickets=await this.list<any>("realtimeTickets"),now=Date.now();
+        const index=tickets.findIndex(t=>t.hash===hash&&t.expiresAt>now);
+        if(index<0)return fail("Realtime ticket is invalid, expired or already used.",401);
+        const [entry]=tickets.splice(index,1);await this.save("realtimeTickets",tickets);
+        const users=await this.list<any>("users"),user=users.find(u=>u.id===entry.userId);
+        return user?json({user:{id:user.id,name:user.name,email:user.email}}):fail("Account not found.",401);
+      }
       if(path==="/auth/verify"&&method==="POST") {
         const token=clean((await request.json<any>()).token,200);
         const user=token?await this.session(token):null;
@@ -555,9 +574,11 @@ export class RealtimeHub {
     if (url.pathname === "/connect") {
       const connectionId = clean(url.searchParams.get("connection_id"));
       if (!connectionId) return fail("connection_id is required.");
+      const userId = clean(url.searchParams.get("user_id"),100);
+      if (!userId) return fail("Authenticated user is required.",401);
       const pair = new WebSocketPair();
       this.state.acceptWebSocket(pair[1]);
-      pair[1].serializeAttachment({ connectionId, subscriptions: [] as Array<{ type: string; id: string }> });
+      pair[1].serializeAttachment({ connectionId, userId, subscriptions: [] as Array<{ type: string; id: string }> });
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
     if (request.method !== "POST") return fail("Not found.", 404);
@@ -565,7 +586,7 @@ export class RealtimeHub {
     if (url.pathname === "/subscribe" || url.pathname === "/unsubscribe") {
       for (const socket of this.state.getWebSockets()) {
         const meta = socket.deserializeAttachment() as any;
-        if (meta?.connectionId !== body.connection_id) continue;
+        if (meta?.connectionId !== body.connection_id || meta?.userId !== body.user_id) continue;
         const exists = meta.subscriptions.some((s: any) => s.type === body.entity_type && s.id === body.entity_id);
         if (url.pathname === "/subscribe" && !exists) meta.subscriptions.push({ type: body.entity_type, id: body.entity_id });
         if (url.pathname === "/unsubscribe") meta.subscriptions = meta.subscriptions.filter((s: any) => s.type !== body.entity_type || s.id !== body.entity_id);
@@ -622,14 +643,16 @@ export default {
       }
       if (url.pathname === "/connect") {
         if (!requestOrigin || !allowedOrigins.includes(requestOrigin)) return fail("Realtime origin is not allowed.", 403);
-        const sessionToken = clean(url.searchParams.get("token"), 200);
-        if (!sessionToken) return fail("Sign in to connect to realtime.", 401);
+        const ticket = clean(url.searchParams.get("ticket"), 200);
+        if (!ticket) return fail("Sign in to connect to realtime.", 401);
         const authStore = env.APP_DATA.get(env.APP_DATA.idFromName("global"));
-        const authCheck = await authStore.fetch("https://data/auth/verify", { method: "POST", body: JSON.stringify({ token: sessionToken }) });
-        if (!authCheck.ok) return fail("Realtime session is invalid or expired.", 401);
+        const authCheck = await authStore.fetch("https://data/auth/consume-realtime-ticket", { method: "POST", body: JSON.stringify({ ticket }) });
+        if (!authCheck.ok) return fail("Realtime ticket is invalid, expired or already used.", 401);
+        const authPayload = await authCheck.json<any>();
         const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
         const target = new URL("https://hub/connect");
         target.searchParams.set("connection_id", url.searchParams.get("connection_id") || "");
+        target.searchParams.set("user_id", authPayload.user.id);
         return hub.fetch(new Request(target, request));
       }
       if (url.pathname === "/api/subscriptions" || url.pathname === "/api/subscriptions/remove") {
@@ -667,7 +690,7 @@ export default {
         const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
         return withCors(await hub.fetch("https://hub/" + (removing ? "unsubscribe" : "subscribe"), {
           method: "POST",
-          body: JSON.stringify({ ...body, entity_type: entityType, entity_id: entityId })
+          body: JSON.stringify({ ...body, user_id: authenticatedUser!.id, entity_type: entityType, entity_id: entityId })
         }), origin);
       }
       if (url.pathname === "/api/rooms" || url.pathname === "/api/rooms/computer") {
