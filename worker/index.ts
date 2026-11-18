@@ -674,7 +674,7 @@ export default {
         if (request.method !== "POST") return withCors(fail("Method not allowed.", 405), origin);
         const input = await request.json<any>(), playerId = authenticatedUser?.id || "";
         if (!playerId) return withCors(fail("Player session is missing."), origin);
-        const name = nameOf(input.name), gameMode = ["one-v-one", "duo"].includes(input.gameMode) ? input.gameMode : "classic";
+        const name = authenticatedUser.name, gameMode = ["one-v-one", "duo"].includes(input.gameMode) ? input.gameMode : "classic";
         const code = newCode(), mode = url.pathname.endsWith("/computer") ? "computer" : "friends", now = Date.now();
         const players: Player[] = [{ id: playerId, name, color: "red", host: true, joinedAt: now, teamId: gameMode === "duo" ? "sun" : undefined }];
         let status: Room["status"] = "waiting";
@@ -707,6 +707,8 @@ export default {
         if (request.method === "POST") {
           const actionInput = await request.json<any>();
           actionInput.playerId = authenticatedUser!.id;
+          // Display identity is session-owned; never trust a client-supplied name.
+          actionInput.name = authenticatedUser!.name;
           return withCors(await stub.fetch("https://room/action", { method: "POST", body: JSON.stringify({ action: suffix, input: actionInput }) }), origin);
         }
       }
@@ -731,6 +733,10 @@ export default {
           for (const key of ["playerId", "requesterId", "fromPlayerId", "reporterId", "blockerId", "userId", "hostId", "creatorId", "ownerId", "player_id", "user_id"]) {
             if (key in dataBody) dataBody[key] = authenticatedUser!.id;
           }
+          // Keep public display names consistent with the authenticated account.
+          for (const key of ["playerName", "hostName"]) {
+            if (key in dataBody) dataBody[key] = authenticatedUser!.name;
+          }
         }
         return withCors(await data.fetch("https://data" + target, { method: request.method, headers: request.headers.get("authorization") ? { Authorization: request.headers.get("authorization")! } : undefined, body: request.method === "GET" ? undefined : JSON.stringify(dataBody || {}) }), origin);
       }
@@ -740,6 +746,7 @@ export default {
         const lobby = env.MATCHMAKING.get(env.MATCHMAKING.idFromName("global"));
         const queueInput = await request.json<any>();
         queueInput.playerId = authenticatedUser!.id;
+        queueInput.name = authenticatedUser!.name;
         return withCors(await lobby.fetch("https://lobby/" + action, { method: "POST", body: JSON.stringify(queueInput) }), origin);
       }
       return withCors(fail("This API route is not migrated yet.", 501), origin);
