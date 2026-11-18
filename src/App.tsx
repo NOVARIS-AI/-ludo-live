@@ -906,11 +906,11 @@ export default function App() {
   }
 
   async function blockPlayer(targetPlayerId: string) {
-    if (!targetPlayerId || !window.confirm('Block this player? Their messages will be hidden on this device.')) return;
+    if (!targetPlayerId || !window.confirm('Block this player? This prevents new friend requests, private messages, room joins and matchmaking between you.')) return;
     try {
       await api.post('/api/safety/block', { blockerId: playerId, blockedId: targetPlayerId });
       setBlockedPlayerIds(current => [...new Set([...current, targetPlayerId])]);
-      setNotice('Player blocked. Their public chat messages are now hidden for you.');
+      setNotice('Player blocked. Room joins, private messages, friend requests and matchmaking are now restricted.');
     } catch (error) { setNotice(getErrorMessage(error)); }
   }
 
@@ -1950,7 +1950,7 @@ export default function App() {
           </div>
         </aside>
         <div className="floating-chat-stack" aria-live="polite">
-          {room.messages.slice(-3).map(message => (
+          {room.messages.filter(message => !blockedPlayerIds.includes(message.playerId)).slice(-3).map(message => (
             <div className={'floating-chat-message ' + (message.kind === 'reaction' ? 'floating-reaction' : '')} key={message.id}>
               {message.kind === 'chat' ? <><b>{message.name}</b><span>{message.text}</span></> : <><b>{message.name}</b><span>{message.text}</span></>}
             </div>
