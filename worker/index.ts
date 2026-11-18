@@ -422,18 +422,31 @@ export class AppData {
         const token=(request.headers.get("authorization")||"").replace(/^Bearer\\s+/i,"");
         const user=token?await this.session(token):null;
         if(!user)return fail("Authentication required.",401);
-        const ticket=this.token(),tickets=await this.list<any>("realtimeTickets"),now=Date.now();
-        tickets.push({hash:await this.digest(ticket),userId:user.id,expiresAt:now+60_000});
-        await this.save("realtimeTickets",tickets.filter(t=>t.expiresAt>now).slice(-5000));
+        const ticket=this.token(),hash=await this.digest(ticket),now=Date.now();
+        const issued=await this.state.storage.transaction(async txn=>{
+          const tickets=await txn.get<any[]>("realtimeTickets")||[];
+          const active=tickets.filter(t=>t.expiresAt>now&&t.createdAt>now-60_000);
+          if(active.filter(t=>t.userId===user.id).length>=10)return false;
+          active.push({hash,userId:user.id,createdAt:now,expiresAt:now+60_000});
+          await txn.put("realtimeTickets",active.slice(-5000));
+          return true;
+        });
+        if(!issued)return fail("Too many realtime reconnect attempts. Wait a minute and try again.",429);
         return json({ticket,expiresIn:60});
       }
       if(path==="/auth/consume-realtime-ticket"&&method==="POST") {
         const ticket=clean((await request.json<any>()).ticket,200);
         if(!ticket)return fail("Realtime ticket required.",401);
-        const hash=await this.digest(ticket),tickets=await this.list<any>("realtimeTickets"),now=Date.now();
-        const index=tickets.findIndex(t=>t.hash===hash&&t.expiresAt>now);
-        if(index<0)return fail("Realtime ticket is invalid, expired or already used.",401);
-        const [entry]=tickets.splice(index,1);await this.save("realtimeTickets",tickets);
+        const hash=await this.digest(ticket),now=Date.now();
+        const entry=await this.state.storage.transaction(async txn=>{
+          const tickets=await txn.get<any[]>("realtimeTickets")||[];
+          const index=tickets.findIndex(t=>t.hash===hash&&t.expiresAt>now);
+          if(index<0)return null;
+          const [consumed]=tickets.splice(index,1);
+          await txn.put("realtimeTickets",tickets);
+          return consumed;
+        });
+        if(!entry)return fail("Realtime ticket is invalid, expired or already used.",401);
         const users=await this.list<any>("users"),user=users.find(u=>u.id===entry.userId);
         return user?json({user:{id:user.id,name:user.name,email:user.email}}):fail("Account not found.",401);
       }
