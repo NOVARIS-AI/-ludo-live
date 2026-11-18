@@ -92,6 +92,12 @@ export class LudoRoom {
     if (!room) throw Object.assign(new Error("Room not found."), { status: 404 });
     return room;
   }
+  private async isBlocked(playerId: string, otherId: string) {
+    const data = this.env.APP_DATA.get(this.env.APP_DATA.idFromName("global"));
+    const response = await data.fetch("https://data/block-status?a=" + encodeURIComponent(playerId) + "&b=" + encodeURIComponent(otherId));
+    if (!response.ok) return true;
+    return !!(await response.json<any>()).blocked;
+  }
   private async checkChatRate(playerId: string) {
     const key = "chat-rate:" + playerId;
     const now = Date.now();
@@ -245,6 +251,7 @@ export class LudoRoom {
       requirePlayer(room, playerId); requirePlayer(room, peerId);
       const peer = room.players.find(p => p.id === peerId);
       if (peerId === playerId || peer?.isBot) return fail("Choose another human player for private chat.");
+      if (action === "private-chat" && await this.isBlocked(playerId, peerId)) return fail("Messaging is unavailable between these accounts.", 403);
       const key = "dm:" + [playerId, peerId].sort().join(":");
       const messages = await this.state.storage.get<any[]>(key) || [];
       if (action === "private-chat/list") return json({ messages: messages.slice(-40) });
@@ -302,7 +309,13 @@ export class MatchmakingLobby {
       const active = entries.find(e => e.playerId === playerId && e.status === "waiting");
       if (active) return json({ status: "waiting", queueId: active.queueId });
       const now = Date.now();
-      const opponent = entries.find(e => e.status === "waiting" && e.playerId !== playerId && now - e.joinedAt < 90000);
+      let opponent: QueueEntry | undefined;
+      const data = this.env.APP_DATA.get(this.env.APP_DATA.idFromName("global"));
+      for (const candidate of entries) {
+        if (candidate.status !== "waiting" || candidate.playerId === playerId || now - candidate.joinedAt >= 90000) continue;
+        const blocked = await data.fetch("https://data/block-status?a=" + encodeURIComponent(playerId) + "&b=" + encodeURIComponent(candidate.playerId));
+        if (blocked.ok && !(await blocked.json<any>()).blocked) { opponent = candidate; break; }
+      }
       if (!opponent) {
         entries.push({ queueId, playerId, name, status: "waiting", joinedAt: now });
         await this.state.storage.put("entries", entries.slice(-300));
@@ -483,6 +496,10 @@ export class AppData {
         const playerId=decodeURIComponent(path.slice(9)), blocks=await this.list<any>("blocks");
         return json({blockedPlayerIds:blocks.filter(b=>b.blockerId===playerId).map(b=>b.blockedId)});
       }
+      if (path === "/block-status" && method === "GET") {
+        const a=clean(url.searchParams.get("a")),b=clean(url.searchParams.get("b")),blocks=await this.list<any>("blocks");
+        return json({blocked:blocks.some(item=>(item.blockerId===a&&item.blockedId===b)||(item.blockerId===b&&item.blockedId===a))});
+      }
       if (path === "/safety/block" && method === "POST") {
         const input=await request.json<any>(), blockerId=clean(input.blockerId), blockedId=clean(input.blockedId);
         if(!blockerId||!blockedId||blockerId===blockedId) return fail("Choose a valid player to block.");
@@ -543,6 +560,8 @@ export class AppData {
       if (path === "/friends/request" && method === "POST") {
         const input=await request.json<any>(), playerId=clean(input.playerId), playerName=clean(input.playerName,18), targetPlayerId=clean(input.targetPlayerId), targetPlayerName=clean(input.targetPlayerName,18);
         if(!playerId||!targetPlayerId||!playerName||!targetPlayerName||playerId===targetPlayerId)return fail("Enter valid player details.");
+        const blocks=await this.list<any>("blocks");
+        if(blocks.some(item=>(item.blockerId===playerId&&item.blockedId===targetPlayerId)||(item.blockerId===targetPlayerId&&item.blockedId===playerId)))return fail("Friend requests are unavailable between these accounts.",403);
         const friends=await this.list<any>("friends"), id=[playerId,targetPlayerId].sort().join(":");
         const existing=friends.find(f=>f.id===id);
         if(existing){if(existing.status==="accepted")return json({friendship:existing});if(existing.playerId===targetPlayerId&&existing.targetPlayerId===playerId){existing.status="accepted";existing.updatedAt=Date.now();await this.save("friends",friends);return json({friendship:existing});}return json({friendship:existing});}
@@ -745,6 +764,16 @@ export default {
           actionInput.playerId = authenticatedUser!.id;
           // Display identity is session-owned; never trust a client-supplied name.
           actionInput.name = authenticatedUser!.name;
+          if (suffix === "join") {
+            const current = await stub.fetch("https://room/read");
+            const currentPayload = await current.json<any>();
+            const otherPlayers = (currentPayload.room?.players || []).filter((p: any) => p.id !== authenticatedUser!.id);
+            const data = env.APP_DATA.get(env.APP_DATA.idFromName("global"));
+            for (const other of otherPlayers) {
+              const blockCheck = await data.fetch("https://data/block-status?a=" + encodeURIComponent(authenticatedUser!.id) + "&b=" + encodeURIComponent(other.id));
+              if (blockCheck.ok && (await blockCheck.json<any>()).blocked) return withCors(fail("This room contains a player you have blocked or who has blocked you.",403),origin);
+            }
+          }
           return withCors(await stub.fetch("https://room/action", { method: "POST", body: JSON.stringify({ action: suffix, input: actionInput }) }), origin);
         }
       }
