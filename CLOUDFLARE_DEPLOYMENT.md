@@ -20,7 +20,7 @@ Create a Cloudflare API token scoped to the account with permission to edit Work
 
 Open GitHub Actions → Deploy Ludo Live to Cloudflare → Run workflow. Select **staging** first. The workflow deploys the Worker and then Pages. The Worker names and Pages projects are isolated between staging and production.
 
-The code now provides email/password registration and login with PBKDF2 password hashing, random bearer sessions, 30-day expiry, login throttling and server-side player-ID binding. Before production, test registration, login, logout, expiry, cross-account isolation, room-action authorization, reconnects and two-device multiplayer against staging. Email ownership verification, password reset and abuse monitoring still need to be added before a public launch.
+The code now provides email/password registration and login with PBKDF2 password hashing, random bearer sessions, 30-day expiry, IP/email-aware login throttling, server-owned player IDs/display names, and one-time WebSocket tickets (60-second expiry, single-use consumption and per-account issuance throttling). Realtime subscriptions are tied to the authenticated socket owner. Public/private room chat has per-player rate limits. Before production, test registration, login, logout, expiry, cross-account isolation, room-action authorization, ticket replay rejection, reconnects, matchmaking pairing/cancellation and two-device multiplayer against staging. Email ownership verification, password reset, TURN relay, comprehensive block enforcement, moderation operations and abuse monitoring still need to be added before a public launch.
 
 ## Safety and rollback
 
