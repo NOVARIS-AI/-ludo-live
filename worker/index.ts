@@ -616,9 +616,38 @@ export default {
         return hub.fetch(new Request(target, request));
       }
       if (url.pathname === "/api/subscriptions" || url.pathname === "/api/subscriptions/remove") {
-        const body = await request.json();
+        const body = await request.json<any>();
+        const entityType = clean(body.entity_type, 40);
+        const entityId = clean(body.entity_id, 140);
+        const removing = url.pathname.endsWith("/remove");
+        if (!body.connection_id || !entityId || !["room", "private-chat", "call-signal"].includes(entityType)) {
+          return withCors(fail("Invalid realtime subscription.", 400), origin);
+        }
+        // Private messages are addressed to a single player. Never let a client
+        // subscribe to another player's private-chat channel.
+        if (entityType === "private-chat") {
+          const match = entityId.match(/^([A-Z0-9]{6})_(.+)$/);
+          if (!match || match[2] !== authenticatedUser!.id) {
+            return withCors(fail("You can only receive your own private messages.", 403), origin);
+          }
+        }
+        // Call signaling is limited to players who have joined that room's call.
+        if (entityType === "call-signal") {
+          const roomCode = entityId.toUpperCase();
+          if (!/^[A-Z0-9]{6}$/.test(roomCode)) return withCors(fail("Invalid call channel.", 400), origin);
+          const roomStub = env.LUDO_ROOMS.get(env.LUDO_ROOMS.idFromName(roomCode));
+          const roomResponse = await roomStub.fetch("https://room/read");
+          if (!roomResponse.ok) return withCors(fail("Room not found.", 404), origin);
+          const roomPayload = await roomResponse.json<any>();
+          if (!(roomPayload.room?.callParticipants || []).includes(authenticatedUser!.id)) {
+            return withCors(fail("Join the room call before receiving call signals.", 403), origin);
+          }
+        }
         const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
-        return withCors(await hub.fetch("https://hub/" + (url.pathname.endsWith("/remove") ? "unsubscribe" : "subscribe"), { method: "POST", body: JSON.stringify(body) }), origin);
+        return withCors(await hub.fetch("https://hub/" + (removing ? "unsubscribe" : "subscribe"), {
+          method: "POST",
+          body: JSON.stringify({ ...body, entity_type: entityType, entity_id: entityId })
+        }), origin);
       }
       if (url.pathname === "/api/rooms" || url.pathname === "/api/rooms/computer") {
         if (request.method !== "POST") return withCors(fail("Method not allowed.", 405), origin);
