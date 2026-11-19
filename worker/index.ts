@@ -689,8 +689,8 @@ export class AppData {
         const wins=matches.filter(m=>m.winnerId===playerId||!!m.winnerTeam&&m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam)).length;
         const cosmetics=[{id:"classic",name:"Classic",winsRequired:0},{id:"ruby-trail",name:"Ruby trail",winsRequired:3},{id:"gold-dice",name:"Golden dice",winsRequired:10},{id:"champion-aura",name:"Champion aura",winsRequired:25}];
         const profiles=await this.list<any>("profiles"),profile=profiles.find(p=>p.id===playerId),unlocked=cosmetics.filter(c=>wins>=c.winsRequired);
-        const xp=matches.length*30+wins*50;
-        return json({playerId,matchesPlayed:matches.length,wins,xp,coins:matches.length*20+wins*30,level:Math.floor(xp/250)+1,unlockedCosmetics:unlocked,cosmetics,equippedCosmetic:unlocked.some(c=>c.id===profile?.equippedCosmetic)?profile.equippedCosmetic:"classic"});
+        const xp=matches.length*30+wins*50,earnedCoins=matches.length*20+wins*30,spentCoins=(profile?.purchases||[]).reduce((sum:number,p:any)=>sum+(Number(p.price)||0),0);
+        return json({playerId,matchesPlayed:matches.length,wins,xp,coins:Math.max(0,earnedCoins-spentCoins),level:Math.floor(xp/250)+1,unlockedCosmetics:unlocked,cosmetics,equippedCosmetic:unlocked.some(c=>c.id===profile?.equippedCosmetic)?profile.equippedCosmetic:"classic"});
       }
       if (path.startsWith("/cosmetics/") && method === "POST") {
         const cosmeticId=decodeURIComponent(path.split("/")[2] || ""),input=await request.json<any>(),playerId=clean(input.playerId),results=await this.list<StoredResult>("results"),matches=results.filter(m=>m.players.some(p=>p.id===playerId)),wins=matches.filter(m=>m.winnerId===playerId||!!m.winnerTeam&&m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam)).length;
