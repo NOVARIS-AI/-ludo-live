@@ -1691,6 +1691,17 @@ export default function App() {
               }}
               onPointerUp={event => {
                 if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                const width = Math.min(320, window.innerWidth - 20);
+                const height = Math.min(440, window.innerHeight - 100);
+                const current = callWindowPosition || { x: window.innerWidth - width - 14, y: window.innerHeight - height - 14 };
+                const corners = [
+                  { x: 14, y: 64 },
+                  { x: window.innerWidth - width - 14, y: 64 },
+                  { x: 14, y: window.innerHeight - height - 14 },
+                  { x: window.innerWidth - width - 14, y: window.innerHeight - height - 14 },
+                ];
+                const nearest = corners.reduce((best, point) => Math.hypot(point.x - current.x, point.y - current.y) < Math.hypot(best.x - current.x, best.y - current.y) ? point : best);
+                if (Math.hypot(nearest.x - current.x, nearest.y - current.y) < 72) setCallWindowPosition(nearest);
               }}
               onPointerCancel={event => {
                 if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -1969,7 +1980,7 @@ export default function App() {
           ))}
         </div>
       </div>
-      {callJoined && callMinimized ? <button className="call-floating-bubble" onClick={() => { setCallMinimized(false); setHangoutOpen(true); }} aria-label="Expand live call"><Phone size={18}/><span>{callPlayers.length || 1}</span></button> : null}
+      {callJoined && callMinimized ? <button className="call-floating-bubble" onClick={() => { setCallMinimized(false); setChatOpen(false); setCrewOpen(false); setHangoutOpen(true); }} aria-label="Expand live call"><Phone size={18}/><span>{callPlayers.length || 1}</span></button> : null}
       {notice ? (
         <div className="toast-notice">
           <X size={15} /> {notice}
