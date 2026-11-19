@@ -1405,7 +1405,6 @@ export default function App() {
               </div>
             ) : null}
           </div>
-        </section>
         </section> : null}
         {!competitionOpen && activePage === 'play' ? <section className="feature-strip">
           <div>
@@ -1435,7 +1434,6 @@ export default function App() {
               <small>Chat and react while playing</small>
             </span>
           </div>
-        </section>
         </section> : null}
         {!competitionOpen && activePage === 'store' ? <Store playerId={playerId} onBack={() => setActivePage('home')} /> : null}
         <footer className="landing-footer">
