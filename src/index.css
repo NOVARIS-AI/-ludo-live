@@ -486,3 +486,97 @@ a {
  .game-topbar .room-chip{margin-left:auto}
  .game-layout.panel-chat-open .chat-feed{max-height:none}
 }
+
+
+/* LUDO LIVE — adaptive product redesign */
+:root{color-scheme:dark}
+.landing-root{background:radial-gradient(ellipse at 12% 8%,rgba(255,215,150,.42),transparent 34%),radial-gradient(ellipse at 88% 30%,rgba(169,139,255,.18),transparent 34%),linear-gradient(145deg,#f8f6f1 0%,#eeedf5 54%,#f7f2eb 100%);color:#201b2c}
+.landing-root .ambient{opacity:.12}
+.landing-root .topbar{position:sticky;top:0;z-index:12;max-width:1240px;margin:0 auto;padding:13px 24px;background:rgba(250,249,246,.82);border:1px solid rgba(39,31,55,.08);border-radius:0 0 20px 20px;box-shadow:0 12px 36px rgba(48,38,62,.07);backdrop-filter:blur(20px)}
+.landing-root .brand{color:#211a31}
+.landing-root .brand-mark{background:linear-gradient(145deg,#38274f,#7053a0);color:#fff;box-shadow:0 8px 22px #60458b38}
+.landing-root .brand-accent{color:#8a63c8}
+.primary-nav{display:flex;align-items:center;gap:5px;margin-left:auto;margin-right:18px}
+.primary-nav button{border:0;background:transparent;color:#625a70;padding:10px 12px;border-radius:11px;font-size:11px;font-weight:800;cursor:pointer;transition:.2s}
+.primary-nav button:hover,.primary-nav button.nav-current{background:#e9e2f3;color:#52347f}
+.landing-root .topbar-right{gap:9px}
+.landing-root .topbar-right .secondary-button{background:linear-gradient(135deg,#594078,#8a64bc);color:#fff}
+.landing-root .online-pill{color:#526b5d;background:#e6f2e9;border:1px solid #cfe5d4}
+.landing-root .account-chip{background:#e9e2f3;color:#5a3d84}
+.landing-root .account-signout{color:#655c70;border-color:#d8d1df;background:#fff}
+.landing-root .hero{max-width:1240px;min-height:0;padding:clamp(36px,6vw,78px) 28px 48px;gap:clamp(24px,5vw,72px);align-items:center}
+.landing-root .hero h1{color:#211a30;text-shadow:none}
+.landing-root .hero h1 span{background:linear-gradient(100deg,#7d56b1,#bd8748);-webkit-background-clip:text;background-clip:text;color:transparent}
+.landing-root .hero-description{color:#6e6677;max-width:46ch}
+.landing-root .eyebrow{color:#77579b}
+.landing-root .hero-points span{color:#625a70;background:rgba(255,255,255,.72);border:1px solid #e5deeb}
+.landing-root .join-card{background:rgba(255,255,255,.82);border:1px solid rgba(83,62,110,.13);box-shadow:0 28px 80px rgba(62,46,82,.13);backdrop-filter:blur(20px);color:#282137}
+.landing-root .join-card-heading h2{color:#251d35}
+.landing-root .join-card-heading p,.landing-root .game-mode-options button small{color:#776e82}
+.landing-root .field-label{color:#6c587f}
+.landing-root .text-field{background:#faf9fc;border-color:#ded6e7;color:#292137}
+.landing-root .game-mode-options button{background:#f7f4fa;border-color:#e4dceb;color:#443454}
+.landing-root .game-mode-options button.selected{background:#eee5fa;border-color:#9b79c7;color:#4d3273}
+.landing-root .mode-card{background:linear-gradient(120deg,#fff,#f6f1fa);border:1px solid #e7dfed;color:#30243f;box-shadow:0 8px 20px rgba(57,39,75,.05);transition:transform .2s,box-shadow .2s}
+.landing-root .mode-card:hover{transform:translateY(-3px);box-shadow:0 15px 30px rgba(57,39,75,.11)}
+.landing-root .mode-card small{color:#776e82}
+.landing-root .mode-icon{background:#eee5f8;color:#7955a5}
+.landing-root .separator{color:#8b8294}
+.landing-root .guest-note{color:#7a7184}
+.landing-root .feature-strip{max-width:1180px;padding-bottom:20px}
+.landing-root .feature-strip>div{background:rgba(255,255,255,.72);border:1px solid #e5deeb;box-shadow:0 10px 28px rgba(52,40,68,.05);color:#33283f}
+.landing-root .feature-strip small{color:#766d80}
+.landing-root .landing-footer{color:#8d8495}
+.landing-root:has(.competition-hub) .hero,.landing-root:has(.competition-hub) .feature-strip,.landing-root:has(.competition-hub) .landing-footer{display:none}
+.landing-root:has(.competition-hub){min-height:100dvh}
+.landing-root:has(.competition-hub) .competition-hub{margin:24px auto 50px}
+.competition-hub{overflow:hidden;background:radial-gradient(ellipse at 85% 0%,rgba(171,119,255,.22),transparent 38%),radial-gradient(ellipse at 8% 20%,rgba(227,171,83,.14),transparent 35%),linear-gradient(145deg,#171222,#100d19 58%,#21152c);border:1px solid rgba(225,190,133,.22);box-shadow:0 30px 90px rgba(23,12,37,.24);color:#f7f0ff}
+.competition-head{position:relative;min-height:205px;overflow:hidden;align-items:center;padding:26px 28px;border:1px solid rgba(255,255,255,.08);border-radius:17px;background:linear-gradient(110deg,rgba(70,45,99,.8),rgba(28,21,42,.55)),radial-gradient(circle at 80% 45%,rgba(255,193,93,.25),transparent 30%)}
+.championship-copy{position:relative;z-index:1;max-width:690px}
+.championship-copy .mini-label{color:#e5bf7b;letter-spacing:2px}
+.championship-copy h2{font-size:clamp(30px,5vw,54px);letter-spacing:-1.7px;line-height:1;margin:13px 0 10px;text-shadow:0 8px 30px #0008}
+.championship-copy h2 em{font-style:normal;background:linear-gradient(100deg,#ffe4a6,#c58b45);-webkit-background-clip:text;background-clip:text;color:transparent}
+.championship-copy p{color:#c8bdd6;font-size:13px;max-width:46ch}
+.championship-meta{display:flex;gap:9px;flex-wrap:wrap;margin-top:20px}
+.championship-meta span{padding:7px 10px;border:1px solid rgba(226,190,125,.28);border-radius:99px;background:rgba(12,9,20,.3);color:#e7d2a9;font-size:8px;font-weight:900;letter-spacing:1px}
+.championship-trophy{display:flex;flex-direction:column;align-items:center;gap:9px;margin:0 32px 0 auto;color:#f2c77c;filter:drop-shadow(0 0 28px rgba(233,175,89,.35));transform:rotate(-7deg)}
+.championship-trophy span{font-size:8px;font-weight:900;letter-spacing:2px;color:#e5c58f}
+.competition-head>.secondary-button{align-self:flex-start;flex:none}
+.competition-tabs{gap:8px;padding:17px 2px 20px}
+.competition-tabs button{padding:11px 14px;border-radius:12px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.09);color:#c9bdd7;font-weight:800;transition:.2s}
+.competition-tabs button:hover{border-color:#d6b477;color:#fff}
+.competition-tabs button.selected{background:linear-gradient(120deg,#7953a3,#49325f);border-color:#c39a5c;color:#fff;box-shadow:0 8px 24px #0004,inset 0 1px #ffffff25}
+.competition-card{background:linear-gradient(150deg,rgba(44,33,59,.96),rgba(25,20,35,.98));border:1px solid rgba(220,190,139,.14);box-shadow:0 12px 34px rgba(0,0,0,.16);border-radius:17px}
+.competition-card h3{color:#f7edff}
+.competition-card p{line-height:1.65;color:#b8adca}
+.competition-card-title h3{color:#f6eaff}
+.tournament-row{margin:8px 0;padding:14px;border:1px solid rgba(255,255,255,.08);border-radius:13px;background:linear-gradient(110deg,rgba(255,255,255,.045),rgba(255,255,255,.015))}
+.tournament-row b{font-size:13px;color:#fff}
+.tournament-row small{color:#c2b3d4}
+.tournament-players{color:#d7c8e8;font-size:10px}
+.bracket-mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px;margin-top:8px}
+.bracket-mini span{padding:8px;border-radius:9px;background:#15101f;border:1px solid #ffffff12;color:#d7c5ec;font-size:9px}
+.status-tag{padding:6px 9px;border-radius:99px;background:#31243f;border:1px solid #6e5487;color:#e1c6ff;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.7px}
+.competition-empty{padding:24px;border:1px dashed rgba(218,190,143,.24);border-radius:13px;color:#c4b7d2;text-align:center}
+.competition-foot{border-top:1px solid #ffffff12;color:#b5a8c5}
+.board-style-toggle{display:flex;align-items:center;gap:7px;flex:none;padding:8px 10px;border:1px solid rgba(214,181,121,.3);border-radius:11px;background:linear-gradient(120deg,rgba(110,79,145,.28),rgba(188,143,78,.12));color:#f1d7a7;font-size:9px;font-weight:850;cursor:pointer}
+.board-theme-premium .ludo-board{padding:7px;border:1px solid #d7b76b;border-radius:15px;background:linear-gradient(145deg,#342544,#151321);box-shadow:0 0 0 3px rgba(218,177,91,.12),0 16px 45px rgba(0,0,0,.48),inset 0 1px #fff4}
+.board-theme-premium .board-cell{box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.board-theme-premium .base-cell{filter:saturate(1.2);box-shadow:inset 0 0 12px rgba(0,0,0,.2),inset 0 0 0 1px rgba(255,255,255,.2)}
+.board-theme-premium .game-token{box-shadow:0 4px 8px #0009,inset 0 2px 3px #ffffff9c,inset 0 -3px 4px #0005}
+.board-theme-premium .center-diamond{filter:drop-shadow(0 5px 7px #0008)}
+.board-theme-premium .board-center{background:radial-gradient(circle,#4a365f,#20172e 72%);border:1px solid #d6b56f}
+.call-floating-window{position:fixed!important;z-index:45!important;left:auto;top:auto;width:min(320px,calc(100vw - 20px));max-height:min(72dvh,560px);overflow:auto;overscroll-behavior:contain;background:rgba(23,18,34,.96)!important;border:1px solid rgba(212,177,115,.48)!important;border-radius:19px!important;box-shadow:0 24px 80px #000a,0 0 0 1px #ffffff0a;backdrop-filter:blur(24px);padding:12px!important}
+.call-window-heading-actions{display:flex;align-items:center;gap:12px}
+.call-window-drag-handle{cursor:grab;touch-action:none;user-select:none}
+.call-window-drag-handle:active{cursor:grabbing}
+.call-minimize-button{width:27px;height:27px;border:1px solid #ffffff26;border-radius:9px;background:#ffffff12;color:#fff;font-size:19px;line-height:1;cursor:pointer}
+.call-is-minimized{display:none!important}
+.call-floating-bubble{position:fixed;z-index:60;right:18px;bottom:calc(18px + env(safe-area-inset-bottom));width:58px;height:58px;border:1px solid #f0cb82;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#7653a0,#332243);color:#fff;box-shadow:0 10px 35px #0009,0 0 25px #b58be755;cursor:pointer}
+.call-floating-bubble span{position:absolute;right:-2px;top:-2px;min-width:18px;height:18px;display:grid;place-items:center;border-radius:99px;background:#e7b965;color:#21152e;font-size:9px;font-weight:900}
+.call-window-heading-actions svg{flex:none}
+@media(max-width:900px){.primary-nav{gap:1px;margin-right:7px}.primary-nav button{padding:9px 8px;font-size:10px}.landing-root .topbar{padding-inline:14px}}
+@media(max-width:700px){.primary-nav{position:fixed;z-index:20;left:10px;right:10px;bottom:calc(8px + env(safe-area-inset-bottom));margin:0;justify-content:space-around;padding:7px;border:1px solid #ffffff25;border-radius:18px;background:rgba(35,27,48,.94);box-shadow:0 12px 35px #0004;backdrop-filter:blur(20px)}.primary-nav button{flex:1;padding:10px 4px;color:#e7def0;font-size:9px}.primary-nav button.nav-current,.primary-nav button:focus{background:#604781;color:#fff}.landing-root .topbar{border-radius:0 0 16px 16px}.landing-root .topbar-right{gap:5px}.landing-root .topbar-right .secondary-button{padding:8px}.landing-root .hero{padding:30px 15px 26px}.landing-root .hero h1{font-size:clamp(38px,11vw,52px)}.landing-root .join-card{padding:17px}.landing-root .feature-strip{padding-bottom:90px}.landing-root:has(.competition-hub) .competition-hub{margin:10px auto 95px;padding:12px}.competition-head{min-height:175px;padding:18px}.championship-trophy{margin-right:4px}.championship-trophy svg{width:43px;height:43px}.championship-copy h2{font-size:30px}.championship-copy .mini-label{font-size:8px}.competition-tabs{padding-bottom:14px}.competition-grid{grid-template-columns:minmax(0,1fr)}.board-style-toggle{padding:7px}.board-style-toggle span{display:none}.call-floating-window{right:10px!important;bottom:82px!important;left:auto!important;top:auto!important;width:min(290px,calc(100vw - 20px))}.call-floating-bubble{bottom:calc(78px + env(safe-area-inset-bottom))}}
+@media(max-width:390px){.primary-nav button{font-size:8px;padding:9px 2px}.landing-root .topbar{padding:10px}.landing-root .brand{font-size:13px}.landing-root .topbar-right .account-signout{font-size:8px;padding:7px}.board-style-toggle{margin-left:auto}}
+@media(max-width:760px) and (orientation:landscape){.game-root{height:100dvh;overflow:hidden}.game-layout,.game-layout.panel-chat-open,.game-layout.panel-crew-open,.game-layout.panel-hangout-open{height:calc(100dvh - 46px);overflow:hidden}.play-column{min-height:0;grid-template-rows:auto minmax(0,1fr) auto}.board-card{min-height:0;display:flex;align-items:center;justify-content:center}.board-shell{width:min(100%,calc(100dvh - 130px),calc(100vw - 190px));max-height:100%;}.ludo-board{width:min(100%,calc(100dvh - 145px),calc(100vw - 205px));max-height:100%}.board-style-toggle span{display:none}.call-floating-window{max-height:70dvh}}
+@media(prefers-reduced-motion:reduce){.landing-root .mode-card,.competition-tabs button{transition:none}}
