@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { ws } from './lib/realtime';
 import { api, setAuthToken } from './lib/api';
 import CompetitionHub from './CompetitionHub';
+import Store from './Store';
 import {
   ArrowRight,
   Bot,
@@ -22,6 +23,7 @@ import {
   Send,
   Shield,
   Shuffle,
+  ShoppingBag,
   Sparkles,
   Trophy,
   Users,
@@ -382,6 +384,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [competitionOpen, setCompetitionOpen] = useState(false);
+  const [activePage, setActivePage] = useState<'home' | 'play' | 'store'>('home');
   const [competitionTab, setCompetitionTab] = useState<'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'friends' | 'season' | 'connect'>('tournaments');
   const [boardAppearance, setBoardAppearance] = useState<'classic' | 'premium'>('classic');
   const [callMinimized, setCallMinimized] = useState(false);
@@ -1237,9 +1240,10 @@ export default function App() {
             </span>
           </a>
           <nav className="primary-nav" aria-label="Main navigation">
-            <button className="nav-current" onClick={() => { setCompetitionOpen(false); document.getElementById('home')?.scrollIntoView({ behavior: 'smooth' }); }}>Home</button>
-            <button onClick={() => { setCompetitionOpen(false); document.getElementById('play')?.scrollIntoView({ behavior: 'smooth' }); }}>Play</button>
-            <button onClick={() => openCompetition('tournaments')}>Tournaments</button>
+            <button className={activePage === 'home' && !competitionOpen ? 'nav-current' : ''} onClick={() => { setCompetitionOpen(false); setActivePage('home'); }}>Home</button>
+            <button className={activePage === 'play' && !competitionOpen ? 'nav-current' : ''} onClick={() => { setCompetitionOpen(false); setActivePage('play'); }}>Play</button>
+            <button className={competitionOpen && competitionTab === 'tournaments' ? 'nav-current' : ''} onClick={() => openCompetition('tournaments')}>Tournaments</button>
+            <button className={activePage === 'store' && !competitionOpen ? 'nav-current' : ''} onClick={() => { setCompetitionOpen(false); setActivePage('store'); }}>Store</button>
             <button onClick={() => openCompetition('friends')}>Friends</button>
             <button onClick={() => openCompetition('profile')}>Profile</button>
           </nav>
@@ -1253,7 +1257,17 @@ export default function App() {
           </div>
         </header>
         {competitionOpen ? <CompetitionHub playerId={playerId} playerName={getPlayerName()} initialTab={competitionTab} onClose={() => setCompetitionOpen(false)} /> : null}
-        <section className="hero">
+        {!competitionOpen && activePage === 'home' ? <section className="home-dashboard">
+          <div className="home-welcome"><div><span className="mini-label">WELCOME BACK · LUDO LIVE</span><h1>Ready for your next <em>great game?</em></h1><p>Your table is waiting. Challenge friends, climb the rankings and collect your favourite looks.</p><div className="home-actions"><button className="primary-button" onClick={() => setActivePage('play')}><Gamepad2 size={17}/> Play now</button><button className="secondary-button" onClick={() => setActivePage('store')}><ShoppingBag size={16}/> Visit store</button></div></div><div className="home-hero-art"><div className="home-orbit"><span className="orbit-token orbit-red"/><span className="orbit-token orbit-blue"/><span className="orbit-token orbit-yellow"/><span className="orbit-token orbit-green"/><Dice5 size={78}/></div><span className="home-art-caption">ROLL · PLAY · REPEAT</span></div></div>
+          <div className="home-section-heading"><div><span className="mini-label">YOUR LUDO UNIVERSE</span><h2>Make today a game day</h2></div><span className="online-pill"><i/> MULTIPLAYER ONLINE</span></div>
+          <div className="home-feature-grid">
+            <button className="home-feature-card home-feature-play" onClick={() => setActivePage('play')}><Gamepad2 size={27}/><b>Choose your game</b><small>Play computer, friends or online opponents.</small><span>EXPLORE PLAY <ArrowRight size={14}/></span></button>
+            <button className="home-feature-card home-feature-arena" onClick={() => openCompetition('tournaments')}><Trophy size={27}/><b>Enter the arena</b><small>Compete in free community tournaments.</small><span>VIEW CHAMPIONSHIPS <ArrowRight size={14}/></span></button>
+            <button className="home-feature-card home-feature-store" onClick={() => setActivePage('store')}><ShoppingBag size={27}/><b>Personalise your game</b><small>Discover dice, trails, tokens and board styles.</small><span>EXPLORE STORE <ArrowRight size={14}/></span></button>
+          </div>
+          <div className="home-bottom-grid"><div className="home-info-card"><span className="mini-label">FAIR PLAY FIRST</span><h3>Every player gets a fair shot.</h3><p>Cosmetics change your style, never your chances of winning. Play free, earn coins and build your collection.</p></div><div className="home-info-card"><span className="mini-label">COMMUNITY</span><h3>Your next move starts here.</h3><p>Invite your crew, watch matches and celebrate great games together.</p><button className="text-link-button" onClick={() => openCompetition('friends')}>Find your friends <ArrowRight size={14}/></button></div></div>
+        </section> : null}
+        {!competitionOpen && activePage === 'play' ? <section className="hero">
           <div className="hero-copy">
             <div className="eyebrow">
               <Sparkles size={14} /> YOUR CREW. YOUR GAME.
@@ -1392,7 +1406,8 @@ export default function App() {
             ) : null}
           </div>
         </section>
-        <section className="feature-strip">
+        </section> : null}
+        {!competitionOpen && activePage === 'play' ? <section className="feature-strip">
           <div>
             <span className="feature-icon feature-purple">
               <Wifi size={19} />
@@ -1421,6 +1436,8 @@ export default function App() {
             </span>
           </div>
         </section>
+        </section> : null}
+        {!competitionOpen && activePage === 'store' ? <Store playerId={playerId} onBack={() => setActivePage('home')} /> : null}
         <footer className="landing-footer">
           LUDO LIVE <span>•</span> FRIENDS MAKE THE GAME
         </footer>
