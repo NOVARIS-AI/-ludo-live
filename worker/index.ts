@@ -433,6 +433,7 @@ export class MatchmakingLobby {
 
 type StoredTournament = { id:string; name:string; hostId:string; hostName:string; maxPlayers:number; status:"open"|"live"|"completed"; players:Array<{id:string;name:string;joinedAt:number}>; matches:Array<{id:string;round:number;firstPlayerId:string;secondPlayerId:string|null;winnerId:string|null;roomCode?:string}>; championId?:string; createdAt:number; updatedAt:number };
 type StoredResult = { id:string; roomCode:string; winnerId:string|null; winnerTeam:string|null; gameMode:string; players:Array<{id:string;name:string;teamId?:string}>; completedAt:number; replay:any[] };
+const STORE_ITEMS = [{"id":"ruby-trail","name":"Ruby Trail","category":"Token trail","description":"A vivid ruby glow follows your token across the board.","price":180,"icon":"trail","rarity":"Rare"},{"id":"gold-dice","name":"Golden Dice","category":"Dice skin","description":"A polished golden finish for every roll.","price":320,"icon":"dice","rarity":"Epic"},{"id":"champion-aura","name":"Champion Aura","category":"Token effect","description":"A radiant champion shimmer around your tokens.","price":520,"icon":"token","rarity":"Legendary"},{"id":"midnight-board","name":"Midnight Arena","category":"Board theme","description":"A deep violet board look with luminous details.","price":450,"icon":"board","rarity":"Epic"},{"id":"victory-burst","name":"Victory Burst","category":"Victory effect","description":"Celebrate a finished match with a bright flourish.","price":260,"icon":"victory","rarity":"Rare"},{"id":"royal-frame","name":"Royal Profile Frame","category":"Profile frame","description":"A regal frame for your player identity.","price":200,"icon":"profile","rarity":"Rare"}] as const;
 export class AppData {
   constructor(private state: DurableObjectState) {}
   private async list<T>(key:string):Promise<T[]> { return await this.state.storage.get<T[]>(key) || []; }
@@ -661,6 +662,28 @@ export class AppData {
         if(!item||item.status!=="pending")return fail("Friend request not found.",404);
         item.status=input.accept===true?"accepted":"declined";item.updatedAt=Date.now();await this.save("friends",friends);return json({friendship:item});
       }
+      if (path === "/store/catalog" && method === "GET") {
+        const playerId=clean(url.searchParams.get("playerId"));
+        if(!playerId)return fail("Player identity is required.");
+        const results=await this.list<StoredResult>("results"),matches=results.filter(m=>m.players.some(p=>p.id===playerId));
+        const wins=matches.filter(m=>m.winnerId===playerId||!!m.winnerTeam&&m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam)).length;
+        const earned=matches.length*20+wins*30,profiles=await this.list<any>("profiles"),profile=profiles.find(p=>p.id===playerId),purchases=profile?.purchases||[],spent=purchases.reduce((sum:number,p:any)=>sum+(Number(p.price)||0),0);
+        return json({coins:Math.max(0,earned-spent),owned:[...new Set([...(profile?.ownedCosmetics||[]),...purchases.map((p:any)=>p.itemId)])],items:STORE_ITEMS});
+      }
+      if (path === "/store/purchase" && method === "POST") {
+        const input=await request.json<any>(),playerId=clean(input.playerId),itemId=clean(input.itemId,80),item=STORE_ITEMS.find((entry:any)=>entry.id===itemId);
+        if(!playerId||!item)return fail("That store item is unavailable.",404);
+        const profiles=await this.list<any>("profiles"),profile=profiles.find(p=>p.id===playerId)||{id:playerId,purchases:[],ownedCosmetics:[]};
+        profile.purchases=profile.purchases||[];
+        if(profile.purchases.some((p:any)=>p.itemId===itemId)||(profile.ownedCosmetics||[]).includes(itemId))return fail("You already own this item.",409);
+        const results=await this.list<StoredResult>("results"),matches=results.filter(m=>m.players.some(p=>p.id===playerId)),wins=matches.filter(m=>m.winnerId===playerId||!!m.winnerTeam&&m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam)).length;
+        const earned=matches.length*20+wins*30,spent=profile.purchases.reduce((sum:number,p:any)=>sum+(Number(p.price)||0),0),balance=Math.max(0,earned-spent);
+        if(balance<item.price)return fail("Not enough coins yet. Complete more matches to earn coins.",403);
+        profile.purchases.push({itemId,price:item.price,purchasedAt:Date.now()});
+        const index=profiles.findIndex(p=>p.id===playerId);if(index>=0)profiles[index]=profile;else profiles.push(profile);
+        await this.save("profiles",profiles);
+        return json({coins:balance-item.price,owned:[...new Set([...(profile.ownedCosmetics||[]),...profile.purchases.map((p:any)=>p.itemId)])],items:STORE_ITEMS});
+      }
       if (path.startsWith("/progression/") && method === "GET") {
         const playerId=decodeURIComponent(path.slice(13)), results=await this.list<StoredResult>("results"), matches=results.filter(m=>m.players.some(p=>p.id===playerId));
         const wins=matches.filter(m=>m.winnerId===playerId||!!m.winnerTeam&&m.players.some(p=>p.id===playerId&&p.teamId===m.winnerTeam)).length;
@@ -887,7 +910,7 @@ export default {
         }
       }
 
-      if (url.pathname.startsWith("/api/auth/") || url.pathname.startsWith("/api/tournaments") || url.pathname === "/api/leaderboard" || url.pathname === "/api/safety/report" || url.pathname === "/api/safety/block" || url.pathname === "/api/integrations/manifest" || url.pathname === "/api/friends/request" || url.pathname === "/api/friends/respond" || url.pathname === "/api/season/leaderboard" || url.pathname.startsWith("/api/cosmetics/") || /^\/api\/players\/[^/]+\/(summary|blocked|progression|friends)$/.test(url.pathname)) {
+      if (url.pathname.startsWith("/api/auth/") || url.pathname.startsWith("/api/tournaments") || url.pathname === "/api/leaderboard" || url.pathname === "/api/safety/report" || url.pathname === "/api/safety/block" || url.pathname === "/api/integrations/manifest" || url.pathname === "/api/friends/request" || url.pathname === "/api/friends/respond" || url.pathname === "/api/season/leaderboard" || url.pathname.startsWith("/api/store/") || url.pathname.startsWith("/api/cosmetics/") || /^\/api\/players\/[^/]+\/(summary|blocked|progression|friends)$/.test(url.pathname)) {
         const data = env.APP_DATA.get(env.APP_DATA.idFromName("global"));
         const parts = url.pathname.split("/").filter(Boolean);
         let target = url.pathname.replace(/^\/api/, "");
@@ -899,6 +922,8 @@ export default {
         if (url.pathname === "/api/friends/respond") target = "/friends/respond";
         if (url.pathname === "/api/season/leaderboard") target = "/season/leaderboard";
         if (url.pathname.startsWith("/api/cosmetics/")) target = url.pathname.slice(4);
+        if (url.pathname === "/api/store/catalog") target = "/store/catalog?playerId=" + encodeURIComponent(authenticatedUser!.id);
+        if (url.pathname === "/api/store/purchase") target = "/store/purchase";
         if (url.pathname === "/api/integrations/manifest") target = "/manifest";
         let dataBody: any = undefined;
         if (request.method !== "GET") {
