@@ -382,6 +382,10 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [competitionOpen, setCompetitionOpen] = useState(false);
+  const [competitionTab, setCompetitionTab] = useState<'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'friends' | 'season' | 'connect'>('tournaments');
+  const [boardAppearance, setBoardAppearance] = useState<'classic' | 'premium'>('classic');
+  const [callMinimized, setCallMinimized] = useState(false);
+  const openCompetition = (tab: typeof competitionTab) => { setCompetitionTab(tab); setCompetitionOpen(true); };
   const [selectedGameMode, setSelectedGameMode] = useState<'classic' | 'one-v-one' | 'duo'>('classic');
   const [blockedPlayerIds, setBlockedPlayerIds] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
@@ -1220,7 +1224,7 @@ export default function App() {
 
   if (!room || !me) {
     return (
-      <main className="app-root landing-root">
+      <main id="home" className="app-root landing-root">
         <div className="ambient ambient-one" />
         <div className="ambient ambient-two" />
         <header className="topbar">
@@ -1232,8 +1236,15 @@ export default function App() {
               LUDO<span className="brand-accent">LIVE</span>
             </span>
           </a>
+          <nav className="primary-nav" aria-label="Main navigation">
+            <button className="nav-current" onClick={() => { setCompetitionOpen(false); document.getElementById('home')?.scrollIntoView({ behavior: 'smooth' }); }}>Home</button>
+            <button onClick={() => { setCompetitionOpen(false); document.getElementById('play')?.scrollIntoView({ behavior: 'smooth' }); }}>Play</button>
+            <button onClick={() => openCompetition('tournaments')}>Tournaments</button>
+            <button onClick={() => openCompetition('friends')}>Friends</button>
+            <button onClick={() => openCompetition('profile')}>Profile</button>
+          </nav>
           <div className="topbar-right">
-            <button className="secondary-button" onClick={() => setCompetitionOpen(open => !open)}><Trophy size={15}/> COMPETE</button>
+            <button className="secondary-button" onClick={() => openCompetition('tournaments')}><Trophy size={15}/> COMPETE</button>
             <span className="online-pill">
               <i /> MULTIPLAYER ONLINE
             </span>
@@ -1241,7 +1252,7 @@ export default function App() {
             <button className="account-signout" onClick={() => void signOut()}>SIGN OUT</button>
           </div>
         </header>
-        {competitionOpen ? <CompetitionHub playerId={playerId} playerName={getPlayerName()} onClose={() => setCompetitionOpen(false)} /> : null}
+        {competitionOpen ? <CompetitionHub playerId={playerId} playerName={getPlayerName()} initialTab={competitionTab} onClose={() => setCompetitionOpen(false)} /> : null}
         <section className="hero">
           <div className="hero-copy">
             <div className="eyebrow">
@@ -1270,7 +1281,7 @@ export default function App() {
               </span>
             </div>
           </div>
-          <div className="join-card">
+          <div id="play" className="join-card">
             <div className="card-orbit">
               <div className="orbit-token orbit-red" />
               <div className="orbit-token orbit-blue" />
@@ -1477,6 +1488,7 @@ export default function App() {
             LUDO<span className="brand-accent">LIVE</span>
           </span>
         </a>
+        <button className="board-style-toggle" onClick={() => setBoardAppearance(value => value === 'classic' ? 'premium' : 'classic')} title="Switch board appearance"><Dice5 size={15}/><span>{boardAppearance === 'classic' ? 'Classic board' : 'Premium board'}</span></button>
         <div className="room-chip">
           <span>ROOM</span>
           <b>{room.code}</b>
@@ -1499,7 +1511,7 @@ export default function App() {
           </button>
         </div>
       </header>
-      <div className={'game-layout ' + (chatOpen ? 'chat-expanded panel-chat-open' : '') + (crewOpen ? ' panel-crew-open' : '') + (hangoutOpen ? ' panel-hangout-open' : '')}>
+      <div className={'game-layout board-theme-' + boardAppearance + ' ' + (chatOpen ? 'chat-expanded panel-chat-open' : '') + (crewOpen ? ' panel-crew-open' : '') + (hangoutOpen ? ' panel-hangout-open' : '')}>
         <div className="landscape-hint">Rotate your phone for the full-screen landscape game.</div>
         <section className="play-column">
           <div className="match-heading">
@@ -1656,7 +1668,7 @@ export default function App() {
           ) : null}
         </section>
         <aside
-          className={'side-column chat-side-column' + (callJoined ? ' call-floating-window' : '')}
+          className={'side-column chat-side-column' + (callJoined ? ' call-floating-window' : '') + (callMinimized ? ' call-is-minimized' : '')}
           style={callJoined && callWindowPosition ? { left: callWindowPosition.x, top: callWindowPosition.y } : undefined}
         >
           <section className="side-card call-card">
@@ -1688,7 +1700,7 @@ export default function App() {
                 <span className="mini-label">LIVE HANGOUT</span>
                 <h3>Voice & video</h3>
               </div>
-              <Phone size={19} />
+              <div className="call-window-heading-actions"><Phone size={19}/>{callJoined ? <button type="button" className="call-minimize-button" onPointerDown={event => event.stopPropagation()} onClick={() => setCallMinimized(true)} aria-label="Minimize call window">−</button> : null}</div>
             </div>
             <p className="call-description">
               Talk face-to-face while your match keeps moving. Your mic and camera
@@ -1957,6 +1969,7 @@ export default function App() {
           ))}
         </div>
       </div>
+      {callJoined && callMinimized ? <button className="call-floating-bubble" onClick={() => { setCallMinimized(false); setHangoutOpen(true); }} aria-label="Expand live call"><Phone size={18}/><span>{callPlayers.length || 1}</span></button> : null}
       {notice ? (
         <div className="toast-notice">
           <X size={15} /> {notice}
