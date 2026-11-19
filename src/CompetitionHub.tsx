@@ -12,8 +12,9 @@ type Tournament = {
 type Leader = { playerId: string; name: string; wins: number; matches: number };
 type SpectatorRoom = { code: string; status: string; players: Array<{ id: string; name: string; color: string }>; state: { turnMessage: string; winner: string | null; currentTurnIndex: number } };
 
-export default function CompetitionHub({ playerId, playerName, onClose }: { playerId: string; playerName: string; onClose: () => void }) {
-  const [tab, setTab] = useState<'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'friends' | 'season' | 'connect'>('tournaments');
+export default function CompetitionHub({ playerId, playerName, initialTab = 'tournaments', onClose }: { playerId: string; playerName: string; initialTab?: 'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'friends' | 'season' | 'connect'; onClose: () => void }) {
+  const [tab, setTab] = useState<'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'friends' | 'season' | 'connect'>(initialTab);
+  useEffect(() => { setTab(initialTab); }, [initialTab]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [leaders, setLeaders] = useState<Leader[]>([]);
   const [summary, setSummary] = useState<{ matchesPlayed: number; wins: number; losses: number; recentMatches: Array<{ roomCode: string; result: string; players: string[] }> } | null>(null);
@@ -117,7 +118,7 @@ export default function CompetitionHub({ playerId, playerName, onClose }: { play
   return (
     <section className="competition-hub">
       <div className="competition-head">
-        <div><span className="mini-label">LUDO LIVE • COMPETITION CENTRE</span><h2>Play beyond the room.</h2><p>Tournaments, player rankings and live match watching.</p></div>
+        <div className="championship-copy"><span className="mini-label">VELTRONIX NEXUS PRESENTS · LUDO LIVE CHAMPIONSHIP CIRCUIT</span><h2>THE ARENA <em>AWAITS.</em></h2><p>Enter the bracket. Earn your place. Make your run for the crown.</p><div className="championship-meta"><span>FREE COMMUNITY COMPETITION</span><span>FAIR PLAY · NO WAGERS</span></div></div><div className="championship-trophy" aria-hidden="true"><Trophy size={64}/><span>CHAMPIONSHIP</span></div>
         <button className="secondary-button" onClick={onClose}><ArrowLeft size={16}/> Back to game</button>
       </div>
       <div className="competition-tabs">
