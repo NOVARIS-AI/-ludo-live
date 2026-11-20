@@ -127,6 +127,49 @@ describe("AppData authentication and session contracts", () => {
     expect((await meA.json<any>()).user.id).toBe(one.user.id);
     expect((await meB.json<any>()).user.id).toBe(two.user.id);
   });
+  it("creates a name-only guest identity with a persistent bearer session", async () => {
+    const { app } = setup();
+    const result = await app.fetch(post("/auth/guest", { name: "Quick Player" }));
+    const payload = await result.json<any>();
+    expect(result.status).toBe(200);
+    expect(payload.user.name).toBe("Quick Player");
+    expect(payload.user.email).toBe("");
+    expect(payload.user.isGuest).toBe(true);
+    expect(payload.token).toBeTruthy();
+    const me = await app.fetch(new Request("https://test/auth/me", { headers: { authorization: "Bearer " + payload.token } }));
+    expect((await me.json<any>()).user.id).toBe(payload.user.id);
+    expect((await me.json<any>()).user.isGuest).toBe(true);
+  });
+
+  it("links email credentials to the same guest player ID", async () => {
+    const { app } = setup();
+    const guestResponse = await app.fetch(post("/auth/guest", { name: "Player Upgrade" }));
+    const guest = await guestResponse.json<any>();
+    const upgrade = await app.fetch(post("/auth/upgrade", {
+      email: "upgrade@example.test",
+      password: "securepass789",
+    }, { authorization: "Bearer " + guest.token }));
+    const linked = await upgrade.json<any>();
+    expect(upgrade.status).toBe(200);
+    expect(linked.user.id).toBe(guest.user.id);
+    expect(linked.user.email).toBe("upgrade@example.test");
+    expect(linked.user.isGuest).toBe(false);
+    const me = await app.fetch(new Request("https://test/auth/me", { headers: { authorization: "Bearer " + guest.token } }));
+    expect((await me.json<any>()).user.id).toBe(guest.user.id);
+    expect((await me.json<any>()).user.isGuest).toBe(false);
+  });
+
+  it("rejects weak passwords and duplicate emails when upgrading guest profiles", async () => {
+    const { app } = setup();
+    await app.fetch(post("/auth/register", { name: "Existing", email: "taken@example.test", password: "securepass123" }));
+    const guestResponse = await app.fetch(post("/auth/guest", { name: "Guest Player" }));
+    const guest = await guestResponse.json<any>();
+    const weak = await app.fetch(post("/auth/upgrade", { email: "guest@example.test", password: "short" }, { authorization: "Bearer " + guest.token }));
+    const duplicate = await app.fetch(post("/auth/upgrade", { email: "taken@example.test", password: "securepass456" }, { authorization: "Bearer " + guest.token }));
+    expect(weak.status).toBe(400);
+    expect(duplicate.status).toBe(409);
+  });
+
   it("rejects an expired session", async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date("2026-11-20T09:00:00Z"));
     const { app } = setup();
