@@ -34,13 +34,15 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Room creation overwrites spoofed player IDs and display names with session-owned identity.
 - Replay endpoints hide in-progress matches and return snapshots only after completion.
 
-The automated suite currently contains 42 tests across room gameplay, matchmaking/authentication (including concurrent queue operations), realtime hub delivery and authenticated Worker API boundaries. Matchmaking queue mutations are serialized within the lobby Durable Object to prevent overlapping requests from pairing or duplicating queue entries. These are authored tests; the latest CI run must still be checked after each implementation commit, and deployed staging behavior must be verified separately.
+The automated suite currently contains 43 tests across room gameplay, matchmaking/authentication (including concurrent queue operations), realtime hub delivery and authenticated Worker API boundaries. Matchmaking queue mutations are serialized within the lobby Durable Object to prevent overlapping requests from pairing or duplicating queue entries. These are authored tests; the latest CI run must still be checked after each implementation commit, and deployed staging behavior must be verified separately.
 
 ## Automated deployed staging integration
 
 After the staging Worker deploys, the workflow runs `scripts/staging-multiplayer-smoke.mjs` against the configured staging Worker API and Pages origin. It creates two separate temporary test accounts, verifies distinct authenticated identities, creates and joins a real 1v1 Durable Object room, checks host-only start, starts a match, rolls, rejects an invalid token selection, performs a legal move or pass, rejects an out-of-turn roll, verifies the room version advances, and confirms unauthenticated room reads are rejected. Staging Pages deployment is gated on this integration test passing.
 
 The integration script logs out both temporary accounts and attempts to remove both players from the test room. It uses generated staging-only email addresses and does not touch production.
+
+The workflow also runs `scripts/staging-realtime-smoke.mjs` after installing the project dependencies. This second deployed integration test creates two independent accounts, obtains short-lived single-use realtime tickets, opens two authenticated WebSocket connections with the staging Pages Origin, subscribes both connections to the same room, starts the room and requires both sockets to receive the room update. The realtime-ticket endpoint's bearer-header parsing is covered by a Worker API regression test; the deployed WebSocket test additionally validates ticket issuance and consumption end to end.
 
 ## Required staging checks before a public release
 
