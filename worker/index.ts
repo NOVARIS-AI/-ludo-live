@@ -538,7 +538,7 @@ export class AppData {
         return json({ok:true});
       }
       if(path==="/auth/realtime-ticket"&&method==="POST") {
-        const token=(request.headers.get("authorization")||"").replace(/^Bearer\\s+/i,"");
+        const token=(request.headers.get("authorization")||"").replace(/^Bearer\s+/i,"");
         const user=token?await this.session(token):null;
         if(!user)return fail("Authentication required.",401);
         const ticket=this.token(),hash=await this.digest(ticket),now=Date.now();
