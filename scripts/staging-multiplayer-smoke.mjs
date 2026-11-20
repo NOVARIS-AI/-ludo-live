@@ -104,11 +104,13 @@ async function main() {
       expectStatus(moved, 200, "Active player makes a legal move");
     }
 
-    const wrongTurn = await request(`/api/rooms/${roomCode}/roll`, { token: inactiveSession.token, body: {} });
-    expectStatus(wrongTurn, 403, "Reject out-of-turn roll");
-
     const room = await request(`/api/rooms/${roomCode}`, { token: sessions[0].token });
     expectStatus(room, 200, "Read room after two-player actions");
+    const currentPlayerId = room.data.room?.players?.[room.data.room?.state?.currentTurnIndex]?.id;
+    const wrongTurnSession = sessions.find(session => session.id !== currentPlayerId);
+    assert(wrongTurnSession, "Could not identify the player who is out of turn.");
+    const wrongTurn = await request(`/api/rooms/${roomCode}/roll`, { token: wrongTurnSession.token, body: {} });
+    expectStatus(wrongTurn, 403, "Reject out-of-turn roll");
     assert(room.data.room?.version > beforeRoll.version, "Room version did not advance after gameplay actions.");
     assert(room.data.room?.players?.length === 2, "A player was lost during the match.");
 
