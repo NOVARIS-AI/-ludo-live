@@ -15,6 +15,12 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Reconnection inside the 120-second grace window clears the expiry alarm.
 - Expired disconnected players are removed and host ownership is reassigned.
 - Room chat burst limits return HTTP 429 after the configured threshold.
+- Duplicate matchmaking joins return the original waiting queue entry.
+- Blocked pairs are not matched; eligible pairs create one shared 1v1 room.
+- Cancelled queue entries cannot be matched later, and waiting entries expire after 90 seconds.
+- Matchmaking attempts are limited to five per player per minute.
+- Account registration creates distinct player identities; bearer sessions resolve only to their owner.
+- Expired sessions and logged-out sessions are rejected; incorrect passwords do not issue sessions.
 
 ## Required staging checks before a public release
 
