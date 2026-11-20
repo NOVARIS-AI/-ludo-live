@@ -8,6 +8,10 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Only the host can start a match.
 - A player cannot roll out of turn or roll again before resolving the previous roll.
 - Token selection is restricted to the four valid token slots.
+- A player cannot move before rolling or leave the yard without a six.
+- Passing is rejected when a legal move exists and accepted when no token can move.
+- Three consecutive sixes correctly forfeit the turn.
+- Captures return opponents to the yard, while safe squares prevent captures.
 - Reconnection inside the 120-second grace window clears the expiry alarm.
 - Expired disconnected players are removed and host ownership is reassigned.
 - Room chat burst limits return HTTP 429 after the configured threshold.
