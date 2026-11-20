@@ -226,4 +226,35 @@ describe("LudoRoom multiplayer and security contracts", () => {
     }
   });
 
+  it("captures an opponent token on an unprotected square", async () => {
+    const { room, storage } = setup();
+    const game = makeRoom();
+    game.status = "playing";
+    game.state.tokens.p1[0] = 1;
+    game.state.tokens.p2[0] = 41;
+    game.state.dice = 1;
+    await storage.put("room", game);
+    const response = await action(room, "move", { playerId: "p1", tokenIndex: 0 });
+    expect(response.status).toBe(200);
+    const saved = await storage.get<any>("room");
+    expect(saved.state.tokens.p1[0]).toBe(2);
+    expect(saved.state.tokens.p2[0]).toBe(-1);
+    expect(saved.state.turnMessage).toContain("captured");
+  });
+
+  it("does not capture an opponent token on a safe square", async () => {
+    const { room, storage } = setup();
+    const game = makeRoom();
+    game.status = "playing";
+    game.state.tokens.p1[0] = 7;
+    game.state.tokens.p2[0] = 47;
+    game.state.dice = 1;
+    await storage.put("room", game);
+    const response = await action(room, "move", { playerId: "p1", tokenIndex: 0 });
+    expect(response.status).toBe(200);
+    const saved = await storage.get<any>("room");
+    expect(saved.state.tokens.p1[0]).toBe(8);
+    expect(saved.state.tokens.p2[0]).toBe(47);
+  });
+
 });
