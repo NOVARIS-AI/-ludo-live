@@ -1,7 +1,7 @@
 import WebSocket from "ws";
 import { randomUUID } from "node:crypto";
 
-const workerBase = (process.env.LUDO_STAGING_WORKER_API_URL || "").replace(/\\/+$/, "");
+const workerBase = (process.env.LUDO_STAGING_WORKER_API_URL || "").replace(/\/+$/, "");
 const pagesOrigin = process.env.LUDO_STAGING_PAGES_ORIGIN || "";
 if (!workerBase || !pagesOrigin) throw new Error("Staging Worker URL and Pages origin are required.");
 
