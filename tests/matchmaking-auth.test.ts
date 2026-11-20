@@ -172,6 +172,45 @@ describe("AppData authentication and session contracts", () => {
     expect(duplicate.status).toBe(409);
   });
 
+  it("resolves friend request names from stored player accounts, not client input", async () => {
+    const { app } = setup();
+    const a = await app.fetch(post("/auth/register", { name: "Alice Real", email: "alice-friends@example.test", password: "securepass123" }));
+    const b = await app.fetch(post("/auth/register", { name: "Bob Real", email: "bob-friends@example.test", password: "securepass456" }));
+    const alice = (await a.json<any>()).user, bob = (await b.json<any>()).user;
+    const sent = await app.fetch(post("/friends/request", {
+      playerId: alice.id, playerName: "Fake Alice", targetPlayerId: bob.id, targetPlayerName: "Fake Bob",
+    }));
+    const payload = await sent.json<any>();
+    expect(sent.status).toBe(200);
+    expect(payload.friendship.playerName).toBe("Alice Real");
+    expect(payload.friendship.targetPlayerName).toBe("Bob Real");
+    const inbox = await app.fetch(new Request("https://test/friends/" + encodeURIComponent(bob.id)));
+    const incoming = await inbox.json<any>();
+    expect(incoming.incoming[0].playerName).toBe("Alice Real");
+    expect(incoming.incoming[0].playerId).toBe(alice.id);
+  });
+
+  it("rejects friend requests for unknown player IDs", async () => {
+    const { app } = setup();
+    const a = await app.fetch(post("/auth/register", { name: "Alice", email: "alice-unknown@example.test", password: "securepass123" }));
+    const alice = (await a.json<any>()).user;
+    const response = await app.fetch(post("/friends/request", { playerId: alice.id, targetPlayerId: "not-a-real-player" }));
+    expect(response.status).toBe(404);
+  });
+
+  it("automatically accepts a pending friend request when the other player sends one back", async () => {
+    const { app } = setup();
+    const a = await app.fetch(post("/auth/register", { name: "Alice", email: "alice-recip@example.test", password: "securepass123" }));
+    const b = await app.fetch(post("/auth/register", { name: "Bob", email: "bob-recip@example.test", password: "securepass456" }));
+    const alice = (await a.json<any>()).user, bob = (await b.json<any>()).user;
+    await app.fetch(post("/friends/request", { playerId: alice.id, targetPlayerId: bob.id }));
+    const reciprocal = await app.fetch(post("/friends/request", { playerId: bob.id, targetPlayerId: alice.id }));
+    expect(reciprocal.status).toBe(200);
+    expect((await reciprocal.json<any>()).friendship.status).toBe("accepted");
+    const aliceFriends = await app.fetch(new Request("https://test/friends/" + encodeURIComponent(alice.id)));
+    expect((await aliceFriends.json<any>()).friends).toHaveLength(1);
+  });
+
   it("rejects an expired session", async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date("2026-11-20T09:00:00Z"));
     const { app } = setup();
