@@ -372,7 +372,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'guest' | 'login'>('guest');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
-  const [authName, setAuthName] = useState('');
+  const [authName, setAuthName] = useState(localStorage.getItem('ludo-live-player-name') || '');
   const [authError, setAuthError] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
