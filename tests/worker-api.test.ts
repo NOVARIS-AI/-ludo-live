@@ -18,6 +18,7 @@ function harness(user: typeof USER = USER) {
     fetch: async (url: string, init?: RequestInit) => {
       const parsed = new URL(url);
       if (parsed.pathname === "/auth/verify") return Response.json({ user });
+      if (parsed.pathname === "/auth/guest") return Response.json({ token: "guest-session", user: { id: "guest-player", name: "New Player", email: "", isGuest: true } });
       if (parsed.pathname === "/auth/realtime-ticket") return Response.json({ ticket: "single-use-ticket", expiresIn: 60 });
       if (parsed.pathname === "/block-status") return Response.json({ blocked: false });
       if (parsed.pathname === "/results") return Response.json({ ok: true });
@@ -67,6 +68,15 @@ function harness(user: typeof USER = USER) {
 }
 
 describe("Worker authenticated API boundary", () => {
+  it("allows name-only guest creation without a pre-existing bearer token", async () => {
+    const h = harness();
+    const response = await worker.fetch(h.request("/api/auth/guest", { name: "New Player" }, ""), h.env as never);
+    expect(response.status).toBe(200);
+    const payload = await response.json<any>();
+    expect(payload.user.id).toBe("guest-player");
+    expect(payload.user.isGuest).toBe(true);
+  });
+
   it("blocks guest players from creating tournaments at the Worker boundary", async () => {
     const h = harness({ ...USER, isGuest: true });
     const response = await worker.fetch(
