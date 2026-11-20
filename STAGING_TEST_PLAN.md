@@ -36,9 +36,15 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 
 The automated suite currently contains 42 tests across room gameplay, matchmaking/authentication (including concurrent queue operations), realtime hub delivery and authenticated Worker API boundaries. Matchmaking queue mutations are serialized within the lobby Durable Object to prevent overlapping requests from pairing or duplicating queue entries. These are authored tests; the latest CI run must still be checked after each implementation commit, and deployed staging behavior must be verified separately.
 
+## Automated deployed staging integration
+
+After the staging Worker deploys, the workflow runs `scripts/staging-multiplayer-smoke.mjs` against the configured staging Worker API and Pages origin. It creates two separate temporary test accounts, verifies distinct authenticated identities, creates and joins a real 1v1 Durable Object room, checks host-only start, starts a match, rolls, rejects an invalid token selection, performs a legal move or pass, rejects an out-of-turn roll, verifies the room version advances, and confirms unauthenticated room reads are rejected. Staging Pages deployment is gated on this integration test passing.
+
+The integration script logs out both temporary accounts and attempts to remove both players from the test room. It uses generated staging-only email addresses and does not touch production.
+
 ## Required staging checks before a public release
 
-Run these with two separate browser profiles/devices against the staging Pages and Worker URLs:
+The automated Worker integration above exercises two independent accounts against real staging Durable Objects. Also run these client/UI checks with two separate browser profiles/devices against the staging Pages and Worker URLs:
 
 1. Register two different accounts; verify each receives a distinct player identity.
 2. Sign in on both devices and create/join a friends room using its invite code.
