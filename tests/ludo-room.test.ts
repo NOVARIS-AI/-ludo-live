@@ -1,0 +1,159 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { LudoRoom } from "../worker/index.ts";
+
+type Stored = Map<string, unknown>;
+
+class MemoryStorage {
+  data: Stored = new Map();
+  alarmAt: number | null = null;
+  async get<T>(key: string): Promise<T | undefined> { return this.data.get(key) as T | undefined; }
+  async put<T>(key: string, value: T): Promise<void> { this.data.set(key, structuredClone(value)); }
+  async delete(key: string): Promise<boolean> { return this.data.delete(key); }
+  async deleteAll(): Promise<void> { this.data.clear(); }
+  async setAlarm(at: number): Promise<void> { this.alarmAt = at; }
+  async deleteAlarm(): Promise<void> { this.alarmAt = null; }
+  async transaction<T>(callback: (storage: MemoryStorage) => Promise<T>): Promise<T> { return callback(this); }
+}
+
+function makeRoom() {
+  const players = [
+    { id: "p1", name: "Host", color: "red", host: true, joinedAt: 1 },
+    { id: "p2", name: "Guest", color: "blue", host: false, joinedAt: 2 },
+  ];
+  return {
+    id: "ABC123", code: "ABC123", players, status: "waiting" as const,
+    mode: "friends" as const, gameMode: "classic" as const,
+    state: { currentTurnIndex: 0, dice: null, consecutiveSixes: 0, tokens: { p1: [-1, -1, -1, -1], p2: [-1, -1, -1, -1] }, winner: null, winnerTeam: null, turnMessage: "Waiting", lastRoll: null },
+    messages: [], callParticipants: [], version: 1, createdAt: 1, lastActivity: 1, replaySnapshots: [],
+  };
+}
+
+function setup() {
+  const storage = new MemoryStorage();
+  const broadcasts: unknown[] = [];
+  const hub = { fetch: async (_url: string, init?: RequestInit) => { broadcasts.push(init?.body ? JSON.parse(String(init.body)) : null); return Response.json({ ok: true }); } };
+  const appData = { fetch: async () => Response.json({ blocked: false }) };
+  const namespace = (stub: { fetch: (url: string, init?: RequestInit) => Promise<Response> }) => ({
+    idFromName: (name: string) => name,
+    get: () => stub,
+  });
+  const env = {
+    LUDO_ROOMS: namespace({ fetch: async () => Response.json({}) }),
+    REALTIME_HUB: namespace(hub),
+    MATCHMAKING: namespace({ fetch: async () => Response.json({}) }),
+    APP_DATA: namespace(appData),
+    ALLOWED_ORIGIN: "https://example.test",
+  };
+  const room = new LudoRoom({ storage } as never, env as never);
+  return { room, storage, broadcasts };
+}
+
+async function action(room: LudoRoom, name: string, input: Record<string, unknown>) {
+  return room.fetch(new Request("https://room/action", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: name, input }),
+  }));
+}
+
+describe("LudoRoom multiplayer and security contracts", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("rejects duplicate room creation without overwriting the existing room", async () => {
+    const { room, storage } = setup();
+    const initial = makeRoom();
+    const first = await room.fetch(new Request("https://room/create", { method: "POST", body: JSON.stringify(initial) }));
+    const second = await room.fetch(new Request("https://room/create", { method: "POST", body: JSON.stringify({ ...initial, code: "OTHER1" }) }));
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(409);
+    expect((await storage.get<any>("room")).code).toBe("ABC123");
+  });
+
+  it("allows only the host to start a match", async () => {
+    const { room, storage } = setup();
+    await storage.put("room", makeRoom());
+    const guest = await action(room, "start", { playerId: "p2" });
+    expect(guest.status).toBe(403);
+    const host = await action(room, "start", { playerId: "p1" });
+    expect(host.status).toBe(200);
+    expect((await storage.get<any>("room")).status).toBe("playing");
+  });
+
+  it("rejects a roll from a player whose turn is not active", async () => {
+    const { room, storage } = setup();
+    const game = makeRoom();
+    game.status = "playing";
+    await storage.put("room", game);
+    const response = await action(room, "roll", { playerId: "p2" });
+    expect(response.status).toBe(403);
+    expect((await storage.get<any>("room")).state.dice).toBeNull();
+  });
+
+  it("prevents rolling twice before the current dice is resolved", async () => {
+    const { room, storage } = setup();
+    const game = makeRoom();
+    game.status = "playing";
+    await storage.put("room", game);
+    const first = await action(room, "roll", { playerId: "p1" });
+    expect(first.status).toBe(200);
+    const second = await action(room, "roll", { playerId: "p1" });
+    expect(second.status).toBe(400);
+  });
+
+  it("rejects token indices outside the four-token range", async () => {
+    const { room, storage } = setup();
+    const game = makeRoom();
+    game.status = "playing";
+    game.state.dice = 6;
+    await storage.put("room", game);
+    const response = await action(room, "move", { playerId: "p1", tokenIndex: 4 });
+    expect(response.status).toBe(400);
+  });
+
+  it("restores a disconnected player within the 120-second grace period", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-20T08:00:00Z"));
+    const { room, storage } = setup();
+    await storage.put("room", makeRoom());
+    const disconnected = await room.fetch(new Request("https://room/presence/disconnect", {
+      method: "POST", body: JSON.stringify({ playerId: "p2" }),
+    }));
+    expect(disconnected.status).toBe(200);
+    expect(storage.alarmAt).toBe(Date.now() + 120_000);
+    const reconnected = await room.fetch(new Request("https://room/presence/reconnect", {
+      method: "POST", body: JSON.stringify({ playerId: "p2" }),
+    }));
+    expect(reconnected.status).toBe(200);
+    expect(storage.alarmAt).toBeNull();
+    expect((await storage.get<any>("room")).disconnectedAt).toBeUndefined();
+  });
+
+  it("removes a player after the reconnect grace period and preserves a host", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-20T08:00:00Z"));
+    const { room, storage } = setup();
+    await storage.put("room", makeRoom());
+    await room.fetch(new Request("https://room/presence/disconnect", {
+      method: "POST", body: JSON.stringify({ playerId: "p1" }),
+    }));
+    vi.advanceTimersByTime(120_001);
+    await room.alarm();
+    const saved = await storage.get<any>("room");
+    expect(saved.players.map((player: any) => player.id)).toEqual(["p2"]);
+    expect(saved.players[0].host).toBe(true);
+    expect(saved.disconnectedAt).toBeUndefined();
+  });
+
+  it("enforces the per-player room chat burst limit", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-20T08:00:00Z"));
+    const { room, storage } = setup();
+    await storage.put("room", makeRoom());
+    const results: number[] = [];
+    for (let i = 0; i < 9; i++) {
+      results.push((await action(room, "chat", { playerId: "p1", text: "hello" })).status);
+      vi.advanceTimersByTime(1_000);
+    }
+    expect(results.slice(0, 8).every(status => status === 200)).toBe(true);
+    expect(results[8]).toBe(429);
+  });
+});
