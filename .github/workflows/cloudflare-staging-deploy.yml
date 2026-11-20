@@ -77,7 +77,9 @@ jobs:
         env:
           LUDO_STAGING_WORKER_API_URL: ${{ secrets.LUDO_STAGING_WORKER_API_URL }}
           LUDO_STAGING_PAGES_ORIGIN: ${{ secrets.LUDO_STAGING_PAGES_ORIGIN }}
-        run: node scripts/staging-multiplayer-smoke.mjs
+        run: |
+          node scripts/staging-multiplayer-smoke.mjs
+          node scripts/staging-realtime-smoke.mjs
 
   deploy-pages:
     needs: [validate, deploy-worker, staging-multiplayer-test]
