@@ -15,7 +15,8 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Reconnection inside the 120-second grace window clears the expiry alarm.
 - Expired disconnected players are removed and host ownership is reassigned.
 - Room chat burst limits return HTTP 429 after the configured threshold.
-- Duplicate matchmaking joins return the original waiting queue entry.
+- Duplicate matchmaking joins return the original waiting queue entry, including simultaneous retries from the same account.
+- Concurrent joins from two different accounts are serialized and create exactly one shared 1v1 room.
 - Blocked pairs are not matched; eligible pairs create one shared 1v1 room.
 - Cancelled queue entries cannot be matched later, and waiting entries expire after 90 seconds.
 - Matchmaking attempts are limited to five per player per minute.
@@ -33,7 +34,7 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Room creation overwrites spoofed player IDs and display names with session-owned identity.
 - Replay endpoints hide in-progress matches and return snapshots only after completion.
 
-The automated suite currently contains 40 tests across room gameplay, matchmaking/authentication, realtime hub delivery and authenticated Worker API boundaries. These are authored tests; CI execution and deployed staging behavior must still be verified.
+The automated suite currently contains 42 tests across room gameplay, matchmaking/authentication (including concurrent queue operations), realtime hub delivery and authenticated Worker API boundaries. Matchmaking queue mutations are serialized within the lobby Durable Object to prevent overlapping requests from pairing or duplicating queue entries. These are authored tests; the latest CI run must still be checked after each implementation commit, and deployed staging behavior must be verified separately.
 
 ## Required staging checks before a public release
 
