@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import worker from "../worker/index.ts";
 
-const USER = { id: "account-1", name: "Trusted Player", email: "trusted@example.test" };
+const USER: { id: string; name: string; email: string; isGuest?: boolean } = { id: "account-1", name: "Trusted Player", email: "trusted@example.test" };
 const ORIGIN = "https://example.test";
 
 function harness(user: typeof USER = USER) {
@@ -68,7 +68,7 @@ function harness(user: typeof USER = USER) {
 
 describe("Worker authenticated API boundary", () => {
   it("blocks guest players from creating tournaments at the Worker boundary", async () => {
-    const h = harness({ ...USER, isGuest: true } as typeof USER);
+    const h = harness({ ...USER, isGuest: true });
     const response = await worker.fetch(
       h.request("/api/tournaments", { name: "Guest Cup", maxPlayers: 4 }),
       h.env as never,
