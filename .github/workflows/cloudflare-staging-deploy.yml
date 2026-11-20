@@ -73,6 +73,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
       - name: Exercise deployed Worker with two independent players
         env:
           LUDO_STAGING_WORKER_API_URL: ${{ secrets.LUDO_STAGING_WORKER_API_URL }}
