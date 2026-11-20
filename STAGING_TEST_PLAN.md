@@ -1,0 +1,34 @@
+# Ludo Live staging test plan
+
+Automated tests run with `npm test` and are part of GitHub Actions CI. The current suite exercises the room Durable Object contract using an in-memory storage/namespace harness; it does not replace real Cloudflare Durable Object integration tests.
+
+## Automated coverage
+
+- Duplicate room-code creation is rejected without overwriting the room.
+- Only the host can start a match.
+- A player cannot roll out of turn or roll again before resolving the previous roll.
+- Token selection is restricted to the four valid token slots.
+- Reconnection inside the 120-second grace window clears the expiry alarm.
+- Expired disconnected players are removed and host ownership is reassigned.
+- Room chat burst limits return HTTP 429 after the configured threshold.
+
+## Required staging checks before a public release
+
+Run these with two separate browser profiles/devices against the staging Pages and Worker URLs:
+
+1. Register two different accounts; verify each receives a distinct player identity.
+2. Sign in on both devices and create/join a friends room using its invite code.
+3. Confirm spectators cannot issue player actions and a non-host cannot start the match.
+4. Play a complete match, including a six, a legal capture, an invalid move, a no-move pass and a win.
+5. Disconnect the active player, reconnect before 120 seconds, and confirm the same seat and turn are restored.
+6. Leave one player disconnected beyond 120 seconds; confirm removal, host reassignment and continued play.
+7. Start simultaneous matchmaking searches from two accounts; confirm exactly one shared 1v1 room is created and both players receive the same room code.
+8. Cancel a waiting queue entry and verify it cannot later be matched.
+9. Verify a blocked pair cannot match or exchange private messages; verify public chat filters blocked senders in the client.
+10. Verify chat and matchmaking rate limits, session expiry, logout, and cross-account room-action isolation.
+11. Test private messages, room chat, call signalling, reconnects and replay playback on real staging Worker Durable Objects.
+12. Inspect Worker logs for uncaught errors and confirm no production URL or production namespace was touched.
+
+## Release gate
+
+Production remains locked until the staging checks above pass and account ownership verification, password reset, TURN relay, moderation operations and abuse monitoring are implemented and reviewed. A green unit-test run alone is not release approval.
