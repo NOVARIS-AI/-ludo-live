@@ -12,7 +12,7 @@ type Tournament = {
 type Leader = { playerId: string; name: string; wins: number; matches: number };
 type SpectatorRoom = { code: string; status: string; players: Array<{ id: string; name: string; color: string }>; state: { turnMessage: string; winner: string | null; currentTurnIndex: number } };
 
-export default function CompetitionHub({ playerId, playerName, initialTab = 'tournaments', onClose }: { playerId: string; playerName: string; initialTab?: 'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'friends' | 'season' | 'connect'; onClose: () => void }) {
+export default function CompetitionHub({ playerId, playerName, isGuest, onUpgrade, initialTab = 'tournaments', onClose }: { playerId: string; playerName: string; isGuest: boolean; onUpgrade: () => void; initialTab?: 'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'friends' | 'season' | 'connect'; onClose: () => void }) {
   const [tab, setTab] = useState<'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'friends' | 'season' | 'connect'>(initialTab);
   useEffect(() => { setTab(initialTab); }, [initialTab]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -131,10 +131,12 @@ export default function CompetitionHub({ playerId, playerName, initialTab = 'tou
       {tab === 'tournaments' ? <div className="competition-grid">
         <div className="competition-card">
           <span className="mini-label">HOST A COMPETITION</span><h3>Create a tournament</h3>
-          <p>Run a free single-elimination bracket with your crew. Players compete in normal Ludo Live rooms and submit completed match codes.</p>
-          <input className="text-field" value={tournamentName} maxLength={42} onChange={event => setTournamentName(event.target.value)} placeholder="Tournament name"/>
-          <select className="text-field" value={maxPlayers} onChange={event => setMaxPlayers(Number(event.target.value))}><option value={4}>4 players</option><option value={8}>8 players</option><option value={16}>16 players</option></select>
-          <button className="primary-button" disabled={busy || tournamentName.trim().length < 3} onClick={() => void createTournament()}><Plus size={16}/> Create tournament</button>
+          {isGuest ? <><p>Playing as a guest is free. Link an email to protect your player identity and unlock tournament hosting.</p><button className="primary-button" onClick={onUpgrade}><ShieldCheck size={16}/> Add email to unlock</button></> : <>
+            <p>Run a free single-elimination bracket with your crew. Players compete in normal Ludo Live rooms and submit completed match codes.</p>
+            <input className="text-field" value={tournamentName} maxLength={42} onChange={event => setTournamentName(event.target.value)} placeholder="Tournament name"/>
+            <select className="text-field" value={maxPlayers} onChange={event => setMaxPlayers(Number(event.target.value))}><option value={4}>4 players</option><option value={8}>8 players</option><option value={16}>16 players</option></select>
+            <button className="primary-button" disabled={busy || tournamentName.trim().length < 3} onClick={() => void createTournament()}><Plus size={16}/> Create tournament</button>
+          </>}
         </div>
         <div className="competition-card">
           <div className="competition-card-title"><div><span className="mini-label">OPEN & LIVE</span><h3>Community tournaments</h3></div><button className="icon-refresh" onClick={() => void load()} aria-label="Refresh"><RefreshCw size={16}/></button></div>
