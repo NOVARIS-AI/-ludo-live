@@ -156,4 +156,74 @@ describe("LudoRoom multiplayer and security contracts", () => {
     expect(results.slice(0, 8).every(status => status === 200)).toBe(true);
     expect(results[8]).toBe(429);
   });
+  it("rejects passing when the player still has a legal move", async () => {
+    const { room, storage } = setup();
+    const game = makeRoom();
+    game.status = "playing";
+    game.state.dice = 6;
+    await storage.put("room", game);
+    const response = await action(room, "pass", { playerId: "p1" });
+    expect(response.status).toBe(400);
+    expect((await storage.get<any>("room")).state.dice).toBe(6);
+  });
+
+  it("passes the turn when a roll has no legal token move", async () => {
+    const { room, storage } = setup();
+    const game = makeRoom();
+    game.status = "playing";
+    game.state.dice = 3;
+    await storage.put("room", game);
+    const response = await action(room, "pass", { playerId: "p1" });
+    expect(response.status).toBe(200);
+    const saved = await storage.get<any>("room");
+    expect(saved.state.dice).toBeNull();
+    expect(saved.state.currentTurnIndex).toBe(1);
+    expect(saved.state.turnMessage).toContain("Guest");
+  });
+
+  it("does not let a player move before rolling", async () => {
+    const { room, storage } = setup();
+    const game = makeRoom();
+    game.status = "playing";
+    await storage.put("room", game);
+    const response = await action(room, "move", { playerId: "p1", tokenIndex: 0 });
+    expect(response.status).toBe(400);
+    expect((await storage.get<any>("room")).state.tokens.p1).toEqual([-1, -1, -1, -1]);
+  });
+
+  it("requires a six before bringing a token out of the yard", async () => {
+    const { room, storage } = setup();
+    const game = makeRoom();
+    game.status = "playing";
+    game.state.dice = 4;
+    await storage.put("room", game);
+    const response = await action(room, "move", { playerId: "p1", tokenIndex: 0 });
+    expect(response.status).toBe(400);
+    expect((await storage.get<any>("room")).state.tokens.p1[0]).toBe(-1);
+  });
+
+  it("skips the turn after three consecutive sixes", async () => {
+    const { room, storage } = setup();
+    const game = makeRoom();
+    game.status = "playing";
+    game.state.tokens.p1[0] = 0;
+    await storage.put("room", game);
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try {
+      expect((await action(room, "roll", { playerId: "p1" })).status).toBe(200);
+      expect((await action(room, "move", { playerId: "p1", tokenIndex: 0 })).status).toBe(200);
+      expect((await action(room, "roll", { playerId: "p1" })).status).toBe(200);
+      expect((await action(room, "move", { playerId: "p1", tokenIndex: 0 })).status).toBe(200);
+      expect((await action(room, "roll", { playerId: "p1" })).status).toBe(200);
+      const saved = await storage.get<any>("room");
+      expect(saved.state.lastRoll).toBe(6);
+      expect(saved.state.dice).toBeNull();
+      expect(saved.state.consecutiveSixes).toBe(0);
+      expect(saved.state.currentTurnIndex).toBe(1);
+      expect(saved.state.turnMessage).toContain("Three sixes");
+    } finally {
+      random.mockRestore();
+    }
+  });
+
 });
