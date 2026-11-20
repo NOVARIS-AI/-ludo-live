@@ -367,14 +367,19 @@ function MediaTile({
 }
 
 export default function App() {
-  const [authUser, setAuthUser] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [authUser, setAuthUser] = useState<{ id: string; name: string; email: string; isGuest?: boolean } | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'guest' | 'login'>('guest');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authName, setAuthName] = useState('');
   const [authError, setAuthError] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeEmail, setUpgradeEmail] = useState('');
+  const [upgradePassword, setUpgradePassword] = useState('');
+  const [upgradeError, setUpgradeError] = useState('');
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
   const playerId = authUser?.id || 'pending-authentication';
   const [name, setName] = useState(
     localStorage.getItem('ludo-live-player-name') || ''
@@ -442,15 +447,31 @@ export default function App() {
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setAuthBusy(true); setAuthError('');
     try {
-      const endpoint = authMode === 'register' ? '/api/auth/register' : '/api/auth/login';
-      const payload = authMode === 'register' ? { name: authName, email: authEmail, password: authPassword } : { email: authEmail, password: authPassword };
-      const response = await api.post(endpoint, payload);
+      const response = authMode === 'guest'
+        ? await api.post('/api/auth/guest', { name: authName })
+        : await api.post('/api/auth/login', { email: authEmail, password: authPassword });
       const user = response.data?.user, token = response.data?.token;
-      if (!user?.id || !token) throw new Error('The account session could not be created.');
+      if (!user?.id || !token) throw new Error('Your player identity could not be created.');
       setAuthToken(token); setAuthUser(user); setName(user.name || '');
       localStorage.setItem('ludo-live-player-name', user.name || '');
-    } catch (error) { setAuthError(getErrorMessage(error)); }
+    } catch (error) { authErrorSet(error); }
     finally { setAuthBusy(false); }
+  }
+
+  function authErrorSet(error: unknown) {
+    setAuthError(error instanceof TypeError ? 'Could not reach LUDO LIVE. Check your connection and try again.' : getErrorMessage(error));
+  }
+
+  async function linkPlayerEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setUpgradeBusy(true); setUpgradeError('');
+    try {
+      const response = await api.post('/api/auth/upgrade', { email: upgradeEmail, password: upgradePassword });
+      const user = response.data?.user;
+      if (!user?.id || user.id !== playerId || user.isGuest) throw new Error('Your email could not be linked to this player profile.');
+      setAuthUser(user); setUpgradeOpen(false); setUpgradeEmail(''); setUpgradePassword('');
+      setNotice('Email account linked. You can now host tournaments.');
+    } catch (error) { setUpgradeError(error instanceof TypeError ? 'Could not reach LUDO LIVE. Check your connection and try again.' : getErrorMessage(error)); }
+    finally { setUpgradeBusy(false); }
   }
 
   async function signOut() {
