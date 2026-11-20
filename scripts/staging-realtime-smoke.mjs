@@ -1,3 +1,4 @@
+import WebSocket from "ws";
 import { randomUUID } from "node:crypto";
 
 const workerBase = (process.env.LUDO_STAGING_WORKER_API_URL || "").replace(/\\/+$/, "");
@@ -50,14 +51,16 @@ async function openSocket(token) {
   assert(ticket.data.ticket, "Realtime ticket endpoint returned no ticket.");
   const wsUrl = workerBase.replace(/^https:/, "wss:").replace(/^http:/, "ws:") + "/connect";
   const url = new URL(wsUrl);
-  url.searchParams.set("connection_id", randomUUID());
+  const connectionId = randomUUID();
+  url.searchParams.set("connection_id", connectionId);
   url.searchParams.set("ticket", ticket.data.ticket);
-  const socket = new WebSocket(url);
+  const socket = new WebSocket(url, { origin: pagesOrigin });
   await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Realtime WebSocket connection timed out.")), 10000);
-    socket.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
-    socket.addEventListener("error", () => { clearTimeout(timer); reject(new Error("Realtime WebSocket connection failed.")); }, { once: true });
+    const timer = setTimeout(() => { socket.terminate(); reject(new Error("Realtime WebSocket connection timed out.")); }, 10000);
+    socket.once("open", () => { clearTimeout(timer); resolve(); });
+    socket.once("error", error => { clearTimeout(timer); reject(error); });
   });
+  socket.connectionId = connectionId;
   return socket;
 }
 
@@ -88,7 +91,7 @@ async function main() {
     for (const session of sessions) {
       const socket = await openSocket(session.token);
       sockets.push(socket);
-      const connectionId = socket.url ? new URL(socket.url).searchParams.get("connection_id") : null;
+      const connectionId = socket.connectionId;
       assert(connectionId, "Could not recover WebSocket connection identifier.");
       const subscribed = await request("/api/subscriptions", {
         token: session.token,
