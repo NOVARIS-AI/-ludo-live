@@ -28,11 +28,11 @@ function makeRoom() {
   };
 }
 
-function setup() {
+function setup(blocked = false) {
   const storage = new MemoryStorage();
   const broadcasts: unknown[] = [];
   const hub = { fetch: async (_url: string, init?: RequestInit) => { broadcasts.push(init?.body ? JSON.parse(String(init.body)) : null); return Response.json({ ok: true }); } };
-  const appData = { fetch: async () => Response.json({ blocked: false }) };
+  const appData = { fetch: async () => Response.json({ blocked }) };
   const namespace = (stub: { fetch: (url: string, init?: RequestInit) => Promise<Response> }) => ({
     idFromName: (name: string) => name,
     get: () => stub,
@@ -255,6 +255,67 @@ describe("LudoRoom multiplayer and security contracts", () => {
     const saved = await storage.get<any>("room");
     expect(saved.state.tokens.p1[0]).toBe(8);
     expect(saved.state.tokens.p2[0]).toBe(47);
+  });
+
+  it("stores private messages for the two room members and broadcasts only to their inbox channels", async () => {
+    const { room, storage, broadcasts } = setup();
+    await storage.put("room", makeRoom());
+    const sent = await action(room, "private-chat", { playerId: "p1", toPlayerId: "p2", text: "Ready?" });
+    expect(sent.status).toBe(200);
+    const payload = await sent.json<any>();
+    expect(payload.message.playerId).toBe("p1");
+    expect(payload.message.recipientId).toBe("p2");
+    const saved = await storage.get<any[]>("dm:p1:p2");
+    expect(saved).toHaveLength(1);
+    expect(broadcasts.slice(-2).map((item: any) => item.payload.entity_id)).toEqual(["ABC123_p1", "ABC123_p2"]);
+    const inbox = await action(room, "private-chat/list", { playerId: "p2", peerId: "p1" });
+    expect((await inbox.json<any>()).messages).toHaveLength(1);
+  });
+
+  it("blocks private messages when either account has blocked the other", async () => {
+    const { room, storage } = setup(true);
+    await storage.put("room", makeRoom());
+    const response = await action(room, "private-chat", { playerId: "p1", toPlayerId: "p2", text: "Hello" });
+    expect(response.status).toBe(403);
+    expect(await storage.get<any[]>("dm:p1:p2")).toBeUndefined();
+  });
+
+  it("requires both players to join a live call before exchanging call signals", async () => {
+    const { room, storage, broadcasts } = setup();
+    await storage.put("room", makeRoom());
+    const denied = await action(room, "signal", { playerId: "p1", toPlayerId: "p2", signal: { type: "offer", sdp: "test" } });
+    expect(denied.status).toBe(403);
+    await action(room, "call/join", { playerId: "p1" });
+    await action(room, "call/join", { playerId: "p2" });
+    const sent = await action(room, "signal", { playerId: "p1", toPlayerId: "p2", signal: { type: "offer", sdp: "test" } });
+    expect(sent.status).toBe(200);
+    expect((await sent.json<any>()).sent).toBe(true);
+    expect((broadcasts.at(-1) as any).payload.entity_type).toBe("call-signal");
+  });
+
+  it("removes a player from call participants when they leave the call", async () => {
+    const { room, storage } = setup();
+    await storage.put("room", makeRoom());
+    await action(room, "call/join", { playerId: "p1" });
+    await action(room, "call/join", { playerId: "p1" });
+    expect((await storage.get<any>("room")).callParticipants).toEqual(["p1"]);
+    await action(room, "call/leave", { playerId: "p1" });
+    expect((await storage.get<any>("room")).callParticipants).toEqual([]);
+  });
+
+  it("records replay snapshots when gameplay state changes", async () => {
+    const { room, storage } = setup();
+    const game = makeRoom();
+    game.status = "playing";
+    game.state.dice = 1;
+    game.state.tokens.p1[0] = 2;
+    await storage.put("room", game);
+    const moved = await action(room, "move", { playerId: "p1", tokenIndex: 0 });
+    expect(moved.status).toBe(200);
+    const saved = await storage.get<any>("room");
+    expect(saved.replaySnapshots).toHaveLength(1);
+    expect(saved.replaySnapshots[0].tokens.p1[0]).toBe(3);
+    expect(saved.replaySnapshots[0].version).toBe(2);
   });
 
 });
