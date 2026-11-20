@@ -697,14 +697,33 @@ export class AppData {
         return json({playerId,friends:related.filter(f=>f.status==="accepted").map(f=>({playerId:f.playerId===playerId?f.targetPlayerId:f.playerId,name:f.playerId===playerId?f.targetPlayerName:f.playerName})),incoming:related.filter(f=>f.status==="pending"&&f.targetPlayerId===playerId),outgoing:related.filter(f=>f.status==="pending"&&f.playerId===playerId)});
       }
       if (path === "/friends/request" && method === "POST") {
-        const input=await request.json<any>(), playerId=clean(input.playerId), playerName=clean(input.playerName,18), targetPlayerId=clean(input.targetPlayerId), targetPlayerName=clean(input.targetPlayerName,18);
-        if(!playerId||!targetPlayerId||!playerName||!targetPlayerName||playerId===targetPlayerId)return fail("Enter valid player details.");
+        const input=await request.json<any>(), playerId=clean(input.playerId), targetPlayerId=clean(input.targetPlayerId);
+        if(!playerId||!targetPlayerId||playerId===targetPlayerId)return fail("Enter a valid player ID.");
+        const users=await this.list<any>("users"), requester=users.find(user=>user.id===playerId), target=users.find(user=>user.id===targetPlayerId);
+        if(!requester)return fail("Your player profile could not be found.",404);
+        if(!target)return fail("No LUDO LIVE player has that ID. Check it and try again.",404);
+        const now=Date.now();
+        const allowed=await this.state.storage.transaction(async txn=>{
+          const key="friend-request-rate:"+playerId;
+          const attempts=(await txn.get<number[]>(key)||[]).filter(at=>at>now-60*60*1000);
+          if(attempts.length>=20)return false;
+          attempts.push(now);await txn.put(key,attempts);return true;
+        });
+        if(!allowed)return fail("Too many friend requests. Try again later.",429);
         const blocks=await this.list<any>("blocks");
         if(blocks.some(item=>(item.blockerId===playerId&&item.blockedId===targetPlayerId)||(item.blockerId===targetPlayerId&&item.blockedId===playerId)))return fail("Friend requests are unavailable between these accounts.",403);
         const friends=await this.list<any>("friends"), id=[playerId,targetPlayerId].sort().join(":");
         const existing=friends.find(f=>f.id===id);
-        if(existing){if(existing.status==="accepted")return json({friendship:existing});if(existing.playerId===targetPlayerId&&existing.targetPlayerId===playerId){existing.status="accepted";existing.updatedAt=Date.now();await this.save("friends",friends);return json({friendship:existing});}return json({friendship:existing});}
-        const friendship={id,playerId,playerName,targetPlayerId,targetPlayerName,status:"pending",createdAt:Date.now(),updatedAt:Date.now()};
+        if(existing){
+          if(existing.status==="accepted")return json({friendship:existing});
+          if(existing.status==="pending"&&existing.playerId===targetPlayerId&&existing.targetPlayerId===playerId){
+            existing.status="accepted";existing.updatedAt=now;await this.save("friends",friends);return json({friendship:existing,accepted:true});
+          }
+          if(existing.status==="pending")return json({friendship:existing,pending:true});
+          existing.playerId=playerId;existing.playerName=requester.name;existing.targetPlayerId=targetPlayerId;existing.targetPlayerName=target.name;existing.status="pending";existing.createdAt=now;existing.updatedAt=now;
+          await this.save("friends",friends);return json({friendship:existing});
+        }
+        const friendship={id,playerId,playerName:requester.name,targetPlayerId,targetPlayerName:target.name,status:"pending",createdAt:now,updatedAt:now};
         friends.push(friendship);await this.save("friends",friends.slice(-5000));return json({friendship});
       }
       if (path === "/friends/respond" && method === "POST") {
