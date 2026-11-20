@@ -4,7 +4,7 @@ import worker from "../worker/index.ts";
 const USER = { id: "account-1", name: "Trusted Player", email: "trusted@example.test" };
 const ORIGIN = "https://example.test";
 
-function harness() {
+function harness(user: typeof USER = USER) {
   const hubCalls: Array<{ path: string; body: any }> = [];
   const rooms = new Map<string, any>();
   const hub = {
@@ -17,7 +17,7 @@ function harness() {
   const appData = {
     fetch: async (url: string, init?: RequestInit) => {
       const parsed = new URL(url);
-      if (parsed.pathname === "/auth/verify") return Response.json({ user: USER });
+      if (parsed.pathname === "/auth/verify") return Response.json({ user });
       if (parsed.pathname === "/auth/realtime-ticket") return Response.json({ ticket: "single-use-ticket", expiresIn: 60 });
       if (parsed.pathname === "/block-status") return Response.json({ blocked: false });
       if (parsed.pathname === "/results") return Response.json({ ok: true });
@@ -67,6 +67,16 @@ function harness() {
 }
 
 describe("Worker authenticated API boundary", () => {
+  it("blocks guest players from creating tournaments at the Worker boundary", async () => {
+    const h = harness({ ...USER, isGuest: true } as typeof USER);
+    const response = await worker.fetch(
+      h.request("/api/tournaments", { name: "Guest Cup", maxPlayers: 4 }),
+      h.env as never,
+    );
+    expect(response.status).toBe(403);
+    expect((await response.json<any>()).error).toContain("Add an email");
+  });
+
   it("rejects requests to protected API routes without a bearer session", async () => {
     const h = harness();
     const response = await worker.fetch(h.request("/api/rooms/ABC123", undefined, ""), h.env as never);
