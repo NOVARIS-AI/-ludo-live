@@ -59,6 +59,32 @@ describe("MatchmakingLobby contracts", () => {
     expect(created).toHaveLength(1);
     expect((await storage.get<any[]>("entries"))?.map(e => e.status)).toEqual(["matched", "matched"]);
   });
+  it("serializes simultaneous joins so two players create exactly one shared room", async () => {
+    const { lobby, created, storage } = setup();
+    const [first, second] = await Promise.all([
+      lobby.fetch(post("/join", { queueId: "q1", playerId: "p1", name: "One" })),
+      lobby.fetch(post("/join", { queueId: "q2", playerId: "p2", name: "Two" })),
+    ]);
+    expect([first.status, second.status]).toEqual([200, 200]);
+    expect(created).toHaveLength(1);
+    const entries = await storage.get<any[]>("entries");
+    expect(entries?.map(entry => entry.status)).toEqual(["matched", "matched"]);
+    expect(entries?.map(entry => entry.roomCode).filter(Boolean)).toHaveLength(2);
+    expect(entries?.[0].roomCode).toBe(entries?.[1].roomCode);
+  });
+
+  it("deduplicates simultaneous joins from the same player", async () => {
+    const { lobby, created, storage } = setup();
+    const [first, second] = await Promise.all([
+      lobby.fetch(post("/join", { queueId: "q1", playerId: "p1", name: "One" })),
+      lobby.fetch(post("/join", { queueId: "q2", playerId: "p1", name: "One" })),
+    ]);
+    expect(await first.json()).toEqual({ status: "waiting", queueId: "q1" });
+    expect(await second.json()).toEqual({ status: "waiting", queueId: "q1" });
+    expect(await storage.get<any[]>("entries")).toHaveLength(1);
+    expect(created).toHaveLength(0);
+  });
+
   it("keeps cancelled entries out of later matches", async () => {
     const { lobby, created, storage } = setup();
     await lobby.fetch(post("/join", { queueId: "q1", playerId: "p1", name: "One" }));
