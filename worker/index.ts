@@ -834,7 +834,7 @@ export default {
     if (request.method === "OPTIONS") return withCors(new Response(null, { status: 204 }), origin);
     try {
       if (url.pathname === "/api/_healthcheck") return withCors(json({ message: "Success", platform: "cloudflare-workers" }), origin);
-      let authenticatedUser: { id: string; name: string; email: string } | null = null;
+      let authenticatedUser: { id: string; name: string; email: string; isGuest?: boolean } | null = null;
       const isAuthRoute = /^\/api\/auth\/(guest|register|login|me|logout)$/.test(url.pathname);
       if (url.pathname.startsWith("/api/") && !isAuthRoute) {
         const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
