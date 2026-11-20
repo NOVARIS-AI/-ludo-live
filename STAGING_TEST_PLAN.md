@@ -31,6 +31,7 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Worker API boundary tests reject missing bearer sessions on protected routes.
 - Guest entry creates a server-issued player ID and 30-day bearer session using only a display name.
 - Email linking upgrades the same guest player ID; weak passwords and duplicate email addresses are rejected.
+- Friend requests accept only real player IDs, resolve display names from stored accounts, reject unknown IDs, auto-accept reciprocal requests and enforce per-player request rate limits.
 - Guest sessions can use normal multiplayer APIs but cannot create tournaments until an email account is linked.
 - Private inbox subscriptions cannot target another account, and hub identity is taken from the authenticated session.
 - Call-signal subscriptions require both room membership and active call participation.
