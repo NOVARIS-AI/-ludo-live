@@ -65,8 +65,22 @@ jobs:
           PAGES_ORIGIN: ${{ secrets.LUDO_STAGING_PAGES_ORIGIN }}
         run: npx wrangler deploy --name ludo-live-api-staging --var "ALLOWED_ORIGIN:$PAGES_ORIGIN"
 
-  deploy-pages:
+  staging-multiplayer-test:
     needs: [validate, deploy-worker]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Exercise deployed Worker with two independent players
+        env:
+          LUDO_STAGING_WORKER_API_URL: ${{ secrets.LUDO_STAGING_WORKER_API_URL }}
+          LUDO_STAGING_PAGES_ORIGIN: ${{ secrets.LUDO_STAGING_PAGES_ORIGIN }}
+        run: node scripts/staging-multiplayer-smoke.mjs
+
+  deploy-pages:
+    needs: [validate, deploy-worker, staging-multiplayer-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
