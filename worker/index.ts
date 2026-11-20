@@ -242,7 +242,10 @@ export class LudoRoom {
       const tokenIndex = Number(input.tokenIndex), dice = room.state.dice;
       if (!Number.isInteger(tokenIndex) || tokenIndex < 0 || tokenIndex > 3) return fail("Choose one of your four tokens.");
       if (dice === null) return fail("Roll the dice before moving.");
-      const player = room.players[index], captured = moveToken(room, player, tokenIndex, dice);
+      const player = room.players[index];
+      let captured: boolean;
+      try { captured = moveToken(room, player, tokenIndex, dice); }
+      catch (error) { return fail(error instanceof Error ? error.message : "That move is not valid.", 400); }
       const playerWon = room.state.tokens[player.id].every(p => p === 57);
       const teamWon = room.gameMode === "duo" && room.players.filter(p => p.teamId === player.teamId).every(p => room.state.tokens[p.id].every(n => n === 57));
       if (playerWon || teamWon) {
@@ -252,7 +255,7 @@ export class LudoRoom {
         room.state.dice = null; room.state.turnMessage = captured ? player.name + " captured a token and gets another roll!" : player.name + " rolled a six and gets another roll!";
       } else {
         room.state.dice = null; room.state.currentTurnIndex = nextPlayer(room, index);
-        room.state.turnMessage = room.players[room.state.currentTurnIndex].name + " is up next.";
+        room.state.turnMessage = captured ? player.name + " captured a token. " + room.players[room.state.currentTurnIndex].name + " is up next." : room.players[room.state.currentTurnIndex].name + " is up next.";
       }
       return this.save(room, beforeState);
     }
