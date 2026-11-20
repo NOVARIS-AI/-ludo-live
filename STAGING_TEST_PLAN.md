@@ -27,6 +27,14 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Gameplay state changes create replay snapshots.
 - Realtime broadcasts reach only sockets subscribed to the exact entity; duplicate subscriptions are deduplicated and unsubscribe stops delivery.
 
+- Worker API boundary tests reject missing bearer sessions on protected routes.
+- Private inbox subscriptions cannot target another account, and hub identity is taken from the authenticated session.
+- Call-signal subscriptions require both room membership and active call participation.
+- Room creation overwrites spoofed player IDs and display names with session-owned identity.
+- Replay endpoints hide in-progress matches and return snapshots only after completion.
+
+The automated suite currently contains 40 tests across room gameplay, matchmaking/authentication, realtime hub delivery and authenticated Worker API boundaries. These are authored tests; CI execution and deployed staging behavior must still be verified.
+
 ## Required staging checks before a public release
 
 Run these with two separate browser profiles/devices against the staging Pages and Worker URLs:
