@@ -473,11 +473,28 @@ export class AppData {
     const session=sessions.find(s=>s.tokenHash===hash&&s.expiresAt>Date.now());
     if(!session)return null;
     const users=await this.list<any>("users"), user=users.find(u=>u.id===session.userId);
-    return user?{id:user.id,name:user.name,email:user.email}:null;
+    return user?{id:user.id,name:user.name,email:user.email||"",isGuest:user.isGuest===true}:null;
   }
   async fetch(request:Request) {
     const url=new URL(request.url), method=request.method, path=url.pathname;
     try {
+      if(path==="/auth/guest"&&method==="POST") {
+        const input=await request.json<any>(),name=nameOf(input.name),now=Date.now();
+        const ip=clean(request.headers.get("cf-connecting-ip"),64)||"unknown";
+        const allowed=await this.state.storage.transaction(async txn=>{
+          const attempts=await txn.get<any[]>("guestAttempts")||[];
+          const recent=attempts.filter(a=>a.at>now-60*60*1000);
+          if(ip!=="unknown"&&recent.filter(a=>a.ip===ip).length>=20)return false;
+          recent.push({ip,at:now});await txn.put("guestAttempts",recent.slice(-10000));return true;
+        });
+        if(!allowed)return fail("Too many guest profiles from this connection. Try again later.",429);
+        const user={id:"p_"+crypto.randomUUID(),name,email:"",isGuest:true,createdAt:now};
+        const users=await this.list<any>("users");users.push(user);await this.save("users",users.slice(-20000));
+        const token=this.token(),sessions=await this.list<any>("sessions");
+        sessions.push({tokenHash:await this.digest(token),userId:user.id,createdAt:now,expiresAt:now+30*24*60*60*1000});
+        await this.save("sessions",sessions.slice(-20000));
+        return json({token,user:{id:user.id,name:user.name,email:"",isGuest:true}});
+      }
       if(path==="/auth/register"&&method==="POST") {
         const input=await request.json<any>(), email=clean(input.email,254).toLowerCase(), name=nameOf(input.name), password=typeof input.password==="string"?input.password:"";
         if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return fail("Enter a valid email address.");
@@ -496,7 +513,7 @@ export class AppData {
         });
         if(!allowed)return fail("Too many account creation attempts. Please try again in an hour.",429);
         const salt=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,"0")).join("");
-        const user={id:"p_"+crypto.randomUUID(),name,email,salt,passwordHash:await this.passwordHash(password,salt),createdAt:now};
+        const user={id:"p_"+crypto.randomUUID(),name,email,isGuest:false,salt,passwordHash:await this.passwordHash(password,salt),createdAt:now};
         const created=await this.state.storage.transaction(async txn=>{
           const users=await txn.get<any[]>("users")||[];
           if(users.some(u=>u.email===email))return false;
@@ -508,7 +525,23 @@ export class AppData {
         const token=this.token(),sessions=await this.list<any>("sessions");
         sessions.push({tokenHash:await this.digest(token),userId:user.id,createdAt:Date.now(),expiresAt:Date.now()+30*24*60*60*1000});
         await this.save("sessions",sessions.slice(-20000));
-        return json({token,user:{id:user.id,name:user.name,email:user.email}});
+        return json({token,user:{id:user.id,name:user.name,email:user.email,isGuest:false}});
+      }
+      if(path==="/auth/upgrade"&&method==="POST") {
+        const token=(request.headers.get("authorization")||"").replace(/^Bearer\\s+/i,"");
+        const current=token?await this.session(token):null;
+        if(!current)return fail("Your player session has expired. Enter your player name again.",401);
+        if(!current.isGuest)return fail("This player profile already has an email account.",409);
+        const input=await request.json<any>(),email=clean(input.email,254).toLowerCase(),password=typeof input.password==="string"?input.password:"";
+        if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return fail("Enter a valid email address.");
+        if(password.length<10||password.length>128||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password))return fail("Use a password with at least 10 characters, including letters and numbers.");
+        const salt=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,"0")).join("");
+        const users=await this.list<any>("users"),user=users.find(u=>u.id===current.id);
+        if(!user)return fail("Player profile not found.",404);
+        if(users.some(u=>u.id!==user.id&&u.email===email))return fail("An account with this email already exists.",409);
+        user.email=email;user.salt=salt;user.passwordHash=await this.passwordHash(password,salt);user.isGuest=false;user.emailLinkedAt=Date.now();
+        await this.save("users",users);
+        return json({user:{id:user.id,name:user.name,email:user.email,isGuest:false}});
       }
       if(path==="/auth/login"&&method==="POST") {
         const input=await request.json<any>(),email=clean(input.email,254).toLowerCase(),password=typeof input.password==="string"?input.password:"";
@@ -524,7 +557,7 @@ export class AppData {
         const token=this.token(),sessions=await this.list<any>("sessions");
         sessions.push({tokenHash:await this.digest(token),userId:user.id,createdAt:Date.now(),expiresAt:Date.now()+30*24*60*60*1000});
         await this.save("sessions",sessions.slice(-20000));
-        return json({token,user:{id:user.id,name:user.name,email:user.email}});
+        return json({token,user:{id:user.id,name:user.name,email:user.email,isGuest:false}});
       }
       if(path==="/auth/me"&&method==="GET") {
         const token=(request.headers.get("authorization")||"").replace(/^Bearer\s+/i,"");
@@ -802,7 +835,7 @@ export default {
     try {
       if (url.pathname === "/api/_healthcheck") return withCors(json({ message: "Success", platform: "cloudflare-workers" }), origin);
       let authenticatedUser: { id: string; name: string; email: string } | null = null;
-      const isAuthRoute = /^\/api\/auth\/(register|login|me|logout)$/.test(url.pathname);
+      const isAuthRoute = /^\/api\/auth\/(guest|register|login|me|logout)$/.test(url.pathname);
       if (url.pathname.startsWith("/api/") && !isAuthRoute) {
         const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
         if (!token) return withCors(fail("Sign in to continue.", 401), origin);
@@ -927,6 +960,7 @@ export default {
         }
       }
 
+      if (url.pathname === "/api/tournaments" && request.method === "POST" && authenticatedUser?.isGuest) return withCors(fail("Add an email and password to your player profile before creating tournaments.", 403), origin);
       if (url.pathname.startsWith("/api/auth/") || url.pathname.startsWith("/api/tournaments") || url.pathname === "/api/leaderboard" || url.pathname === "/api/safety/report" || url.pathname === "/api/safety/block" || url.pathname === "/api/integrations/manifest" || url.pathname === "/api/friends/request" || url.pathname === "/api/friends/respond" || url.pathname === "/api/season/leaderboard" || url.pathname.startsWith("/api/store/") || url.pathname.startsWith("/api/cosmetics/") || /^\/api\/players\/[^/]+\/(summary|blocked|progression|friends)$/.test(url.pathname)) {
         const data = env.APP_DATA.get(env.APP_DATA.idFromName("global"));
         const parts = url.pathname.split("/").filter(Boolean);
