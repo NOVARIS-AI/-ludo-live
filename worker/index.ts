@@ -528,12 +528,12 @@ export class AppData {
         return json({token,user:{id:user.id,name:user.name,email:user.email,isGuest:false}});
       }
       if(path==="/auth/upgrade"&&method==="POST") {
-        const token=(request.headers.get("authorization")||"").replace(/^Bearer\\s+/i,"");
+        const token=(request.headers.get("authorization")||"").replace(/^Bearer\s+/i,"");
         const current=token?await this.session(token):null;
         if(!current)return fail("Your player session has expired. Enter your player name again.",401);
         if(!current.isGuest)return fail("This player profile already has an email account.",409);
         const input=await request.json<any>(),email=clean(input.email,254).toLowerCase(),password=typeof input.password==="string"?input.password:"";
-        if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return fail("Enter a valid email address.");
+        if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return fail("Enter a valid email address.");
         if(password.length<10||password.length>128||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password))return fail("Use a password with at least 10 characters, including letters and numbers.");
         const salt=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,"0")).join("");
         const users=await this.list<any>("users"),user=users.find(u=>u.id===current.id);
