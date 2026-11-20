@@ -21,6 +21,10 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Matchmaking attempts are limited to five per player per minute.
 - Account registration creates distinct player identities; bearer sessions resolve only to their owner.
 - Expired sessions and logged-out sessions are rejected; incorrect passwords do not issue sessions.
+- Private messages are stored for the two room members and broadcast on their individual inbox channels.
+- Blocked accounts cannot exchange private messages.
+- Call signalling is rejected until both players join the room call; call leave removes participation.
+- Gameplay state changes create replay snapshots.
 
 ## Required staging checks before a public release
 
@@ -36,7 +40,7 @@ Run these with two separate browser profiles/devices against the staging Pages a
 8. Cancel a waiting queue entry and verify it cannot later be matched.
 9. Verify a blocked pair cannot match or exchange private messages; verify public chat filters blocked senders in the client.
 10. Verify chat and matchmaking rate limits, session expiry, logout, and cross-account room-action isolation.
-11. Test private messages, room chat, call signalling, reconnects and replay playback on real staging Worker Durable Objects.
+11. Test private messages, room chat, call signalling, reconnects and replay playback on real staging Worker Durable Objects; confirm the replay API returns the completed match timeline.
 12. Inspect Worker logs for uncaught errors and confirm no production URL or production namespace was touched.
 
 ## Release gate
