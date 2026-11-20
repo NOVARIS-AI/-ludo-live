@@ -18,6 +18,7 @@ function harness() {
     fetch: async (url: string, init?: RequestInit) => {
       const parsed = new URL(url);
       if (parsed.pathname === "/auth/verify") return Response.json({ user: USER });
+      if (parsed.pathname === "/auth/realtime-ticket") return Response.json({ ticket: "single-use-ticket", expiresIn: 60 });
       if (parsed.pathname === "/block-status") return Response.json({ blocked: false });
       if (parsed.pathname === "/results") return Response.json({ ok: true });
       return Response.json({ error: "not found" }, { status: 404 });
@@ -70,6 +71,27 @@ describe("Worker authenticated API boundary", () => {
     const h = harness();
     const response = await worker.fetch(h.request("/api/rooms/ABC123", undefined, ""), h.env as never);
     expect(response.status).toBe(401);
+  });
+
+  it("forwards the bearer session to the single-use realtime ticket issuer", async () => {
+    const h = harness();
+    let forwardedAuthorization = "";
+    const originalGet = h.env.APP_DATA.get;
+    h.env.APP_DATA.get = (id: string) => {
+      const stub = originalGet(id);
+      return {
+        fetch: async (url: string, init?: RequestInit) => {
+          if (new URL(url).pathname === "/auth/realtime-ticket") {
+            forwardedAuthorization = new Headers(init?.headers).get("authorization") || "";
+          }
+          return stub.fetch(url, init);
+        },
+      };
+    };
+    const response = await worker.fetch(h.request("/api/auth/realtime-ticket", {}), h.env as never);
+    expect(response.status).toBe(200);
+    expect(forwardedAuthorization).toBe("Bearer valid-session");
+    expect((await response.json<any>()).ticket).toBe("single-use-ticket");
   });
 
   it("prevents a player from subscribing to another account's private inbox", async () => {
