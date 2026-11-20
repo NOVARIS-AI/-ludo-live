@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "dev:worker": "wrangler dev worker/index.ts",
     "deploy:worker": "wrangler deploy worker/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:contracts": "node --test tests/worker-contract.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.469.0",
