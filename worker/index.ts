@@ -362,7 +362,21 @@ export class LudoRoom {
 type QueueEntry = { queueId: string; playerId: string; name: string; status: "waiting" | "matched" | "cancelled" | "expired"; joinedAt: number; roomCode?: string };
 export class MatchmakingLobby {
   constructor(private state: DurableObjectState, private env: Env) {}
+  // Durable Objects can yield at awaits, so serialize queue mutations within
+  // this instance to prevent two simultaneous joins from pairing the same entry.
+  private queueTail: Promise<void> = Promise.resolve();
   async fetch(request: Request) {
+    const previous = this.queueTail;
+    let release!: () => void;
+    this.queueTail = new Promise<void>(resolve => { release = resolve; });
+    await previous;
+    try {
+      return await this.handleRequest(request);
+    } finally {
+      release();
+    }
+  }
+  private async handleRequest(request: Request) {
     const url = new URL(request.url);
     if (request.method !== "POST") return fail("Not found.", 404);
     const input = await request.json<any>();
