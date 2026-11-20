@@ -29,12 +29,15 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Realtime broadcasts reach only sockets subscribed to the exact entity; duplicate subscriptions are deduplicated and unsubscribe stops delivery.
 
 - Worker API boundary tests reject missing bearer sessions on protected routes.
+- Guest entry creates a server-issued player ID and 30-day bearer session using only a display name.
+- Email linking upgrades the same guest player ID; weak passwords and duplicate email addresses are rejected.
+- Guest sessions can use normal multiplayer APIs but cannot create tournaments until an email account is linked.
 - Private inbox subscriptions cannot target another account, and hub identity is taken from the authenticated session.
 - Call-signal subscriptions require both room membership and active call participation.
 - Room creation overwrites spoofed player IDs and display names with session-owned identity.
 - Replay endpoints hide in-progress matches and return snapshots only after completion.
 
-The automated suite currently contains 43 tests across room gameplay, matchmaking/authentication (including concurrent queue operations), realtime hub delivery and authenticated Worker API boundaries. Matchmaking queue mutations are serialized within the lobby Durable Object to prevent overlapping requests from pairing or duplicating queue entries. These are authored tests; the latest CI run must still be checked after each implementation commit, and deployed staging behavior must be verified separately.
+The automated suite currently contains 47 tests across room gameplay, matchmaking/authentication (including concurrent queue operations, guest identity creation and email linking), realtime hub delivery and authenticated Worker API boundaries. Matchmaking queue mutations are serialized within the lobby Durable Object to prevent overlapping requests from pairing or duplicating queue entries. These are authored tests; the latest CI run must still be checked after each implementation commit, and deployed staging behavior must be verified separately.
 
 ## Automated deployed staging integration
 
