@@ -25,6 +25,7 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Blocked accounts cannot exchange private messages.
 - Call signalling is rejected until both players join the room call; call leave removes participation.
 - Gameplay state changes create replay snapshots.
+- Realtime broadcasts reach only sockets subscribed to the exact entity; duplicate subscriptions are deduplicated and unsubscribe stops delivery.
 
 ## Required staging checks before a public release
 
