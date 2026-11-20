@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - test/multiplayer-security-suite
   workflow_dispatch:
 
 permissions:
