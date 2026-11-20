@@ -137,8 +137,9 @@ describe("AppData authentication and session contracts", () => {
     expect(payload.user.isGuest).toBe(true);
     expect(payload.token).toBeTruthy();
     const me = await app.fetch(new Request("https://test/auth/me", { headers: { authorization: "Bearer " + payload.token } }));
-    expect((await me.json<any>()).user.id).toBe(payload.user.id);
-    expect((await me.json<any>()).user.isGuest).toBe(true);
+    const mePayload = await me.json<any>();
+    expect(mePayload.user.id).toBe(payload.user.id);
+    expect(mePayload.user.isGuest).toBe(true);
   });
 
   it("links email credentials to the same guest player ID", async () => {
@@ -155,8 +156,9 @@ describe("AppData authentication and session contracts", () => {
     expect(linked.user.email).toBe("upgrade@example.test");
     expect(linked.user.isGuest).toBe(false);
     const me = await app.fetch(new Request("https://test/auth/me", { headers: { authorization: "Bearer " + guest.token } }));
-    expect((await me.json<any>()).user.id).toBe(guest.user.id);
-    expect((await me.json<any>()).user.isGuest).toBe(false);
+    const mePayload = await me.json<any>();
+    expect(mePayload.user.id).toBe(guest.user.id);
+    expect(mePayload.user.isGuest).toBe(false);
   });
 
   it("rejects weak passwords and duplicate emails when upgrading guest profiles", async () => {
