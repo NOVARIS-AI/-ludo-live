@@ -36,6 +36,8 @@ jobs:
           test -n "$REALTIME_URL" || (echo "::error::Missing LUDO_STAGING_REALTIME_URL"; exit 1)
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Run multiplayer and security tests
+        run: npm test
       - name: Type-check and build
         env:
           VITE_API_BASE_URL: ${{ secrets.LUDO_STAGING_WORKER_API_URL }}
