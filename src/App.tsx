@@ -367,7 +367,7 @@ function MediaTile({
 }
 
 export default function App() {
-  const [authUser, setAuthUser] = useState<{ id: string; name: string; email: string; isGuest?: boolean } | null>(null);
+  const [authUser, setAuthUser] = useState<{ id: string; name: string; email: string; isGuest?: boolean; emailVerified?: boolean } | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState<'guest' | 'login' | 'register' | 'forgot' | 'reset'>('guest');
   const [authEmail, setAuthEmail] = useState('');
@@ -499,7 +499,7 @@ export default function App() {
           throw new Error('Your account could not be created. Please try again.');
         }
         setAuthToken(token);
-        setAuthUser(user);
+        setAuthUser({ ...user, email: authEmail.trim(), emailVerified: false });
         setName(user.name || authName.trim());
         localStorage.setItem('ludo-live-player-name', user.name || authName.trim());
         setNotice(response.data?.message || 'Your player account is ready. Check your inbox to verify your email; you can keep playing as a guest meanwhile.');
@@ -519,8 +519,11 @@ export default function App() {
   async function resendVerification() {
     setResendBusy(true); setAuthError(''); setAuthMessage('');
     try {
-      const response = await api.post('/api/auth/verification/resend', { email: authEmail });
-      setAuthMessage(response.data?.message || 'If that address has a pending verification, a new link will be sent.');
+      const email = authUser?.email || authEmail;
+      const response = await api.post('/api/auth/verification/resend', { email });
+      const message = response.data?.message || 'If that address has a pending verification, a new link will be sent.';
+      if (authUser) setNotice(message);
+      else setAuthMessage(message);
     } catch (error) { authErrorSet(error); }
     finally { setResendBusy(false); }
   }
@@ -1363,6 +1366,7 @@ export default function App() {
               <i /> MULTIPLAYER ONLINE
             </span>
             <span className="account-chip">{authUser.name}</span>
+            {authUser.email && authUser.emailVerified === false ? <button className="account-signout" onClick={() => void resendVerification()} disabled={resendBusy}>{resendBusy ? 'SENDING…' : 'VERIFY EMAIL'}</button> : null}
             {authUser.isGuest ? <button className="account-signout" onClick={() => { setUpgradeOpen(true); setUpgradeError(""); }}>ADD EMAIL</button> : null}
             <button className="account-signout" onClick={() => void signOut()}>SIGN OUT</button>
           </div>
