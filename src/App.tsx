@@ -441,10 +441,11 @@ export default function App() {
     if (verifyToken) {
       setAuthBusy(true);
       api.post('/api/auth/verify-email', { token: verifyToken })
-        .then(response => {
+        .then(async response => {
           const user = response.data?.user;
           if (user?.id) {
-            if (user.id === authUser?.id) setAuthUser(user);
+            const current = await api.get('/api/auth/me').catch(() => null);
+            if (current?.data?.user?.id) setAuthUser(current.data.user);
             setAuthMessage('Email verified successfully. Your player profile is now linked.');
           }
         })
