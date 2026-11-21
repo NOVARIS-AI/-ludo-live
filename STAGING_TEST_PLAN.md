@@ -72,7 +72,7 @@ Production remains locked until the staging checks above pass and staging email-
 
 ## Email security staging checks
 
-1. Configure `RESEND_API_KEY`, `BREVO_API_KEY`, `LUDO_EMAIL_FROM` and `LUDO_APP_ORIGIN` on the staging Worker only; verify the sender with both providers.
+1. For the current staging setup, configure `RESEND_API_KEY` and `LUDO_EMAIL_FROM` on the staging Worker only; verify the sender with Resend. `LUDO_APP_ORIGIN` is injected from the staging Pages origin by the workflow. `BREVO_API_KEY` is optional and should be added only when the fallback provider is ready.
 2. Verify Resend receives the first attempt and Brevo is used when Resend is deliberately unavailable or returns a non-success response.
 3. Register a new email account and confirm it remains guest-only until the email link is used.
 4. Upgrade a guest profile and verify the same player ID remains in place before and after email verification.
@@ -85,10 +85,13 @@ Production remains locked until the staging checks above pass and staging email-
 ## Transactional email verification and recovery (staging)
 
 - Resend is the primary transactional email provider; Brevo is the automatic fallback when Resend is unavailable or rejects a send.
-- Configure the staging GitHub Actions secrets `RESEND_API_KEY`, `BREVO_API_KEY`, and `LUDO_EMAIL_FROM`. The staging workflow copies provider API keys into Cloudflare Worker secrets and injects the staging Pages origin as `LUDO_APP_ORIGIN`.
+- Configure the current staging GitHub Actions secrets `RESEND_API_KEY` and `LUDO_EMAIL_FROM`. The workflow copies the Resend API key into a Cloudflare Worker secret and injects the sender and staging Pages origin as Worker variables. `BREVO_API_KEY` is an optional future fallback; the workflow will copy it if/when configured.
 - The sender identity/domain must be verified with the provider(s) before real delivery. Do not use production sender credentials or production callback URLs in staging.
 - Verification and password-reset action tokens are random, stored as SHA-256 hashes, expire after 30 minutes, and are consumed once. Password reset invalidates all sessions for that account.
 - Guest email linking remains pending until verification. The existing player ID, guest access, and match history are preserved; tournament creation stays unavailable until verification.
 - Password-reset requests return the same public response whether or not an eligible account exists. Email actions are rate-limited.
-- Validate both provider paths in staging: successful Resend delivery; forced Resend failure followed by successful Brevo delivery; failure of both providers; expired/replayed tokens; email ownership verification; password-reset session revocation; and tournament creation before/after verification.
+- Validate the current Resend path in staging: successful real inbox delivery; expired/replayed tokens; email ownership verification; password-reset session revocation; and tournament creation before/after verification. When Brevo is configured, additionally test Resend failure followed by successful Brevo delivery and failure of both providers.
 - Never log email action tokens or full action URLs. Keep provider keys in GitHub Actions secrets / Cloudflare Worker secrets only.
+
+
+See [docs/EMAIL_KEYS_REFERENCE.md](docs/EMAIL_KEYS_REFERENCE.md) for the credential-by-credential purpose, the exact player flows that use email delivery, and the distinction between secrets and ordinary Worker variables.
