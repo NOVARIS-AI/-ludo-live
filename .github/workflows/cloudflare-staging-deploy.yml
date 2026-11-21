@@ -33,6 +33,8 @@ jobs:
           test -n "$CF_API_TOKEN" || (echo "::error::Missing CLOUDFLARE_API_TOKEN"; exit 1)
           test -n "$CF_ACCOUNT_ID" || (echo "::error::Missing CLOUDFLARE_ACCOUNT_ID"; exit 1)
           test -n "$PAGES_ORIGIN" || (echo "::error::Missing LUDO_STAGING_PAGES_ORIGIN"; exit 1)
+          export PAGES_ORIGIN
+          node -e 'const raw=process.env.PAGES_ORIGIN; let u; try { u=new URL(raw); } catch { console.error("::error::LUDO_STAGING_PAGES_ORIGIN must be a valid HTTPS origin"); process.exit(1); } if (u.protocol !== "https:" || u.origin !== raw || u.pathname !== "/" || u.search || u.hash) { console.error("::error::LUDO_STAGING_PAGES_ORIGIN must contain only the HTTPS scheme and hostname, with no trailing slash or path"); process.exit(1); }'
           test -n "$WORKER_API_URL" || (echo "::error::Missing LUDO_STAGING_WORKER_API_URL"; exit 1)
           test -n "$REALTIME_URL" || (echo "::error::Missing LUDO_STAGING_REALTIME_URL"; exit 1)
       - name: Install dependencies
