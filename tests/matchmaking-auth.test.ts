@@ -115,7 +115,7 @@ describe("MatchmakingLobby contracts", () => {
 
 describe("AppData authentication and session contracts", () => {
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
-  function setup() { const storage = new MemoryStorage(); vi.stubGlobal("fetch", vi.fn(async () => Response.json({ id: "email-sent" }))); const env = { RESEND_API_KEY: "test-resend", LUDO_EMAIL_FROM: "LUDO LIVE <mail@example.test>", LUDO_APP_ORIGIN: "https://staging.example.test" }; return { app: new AppData({ storage } as never, env as never), storage }; }
+  function setup() { const storage = new MemoryStorage(); vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ id: "email-sent" }), { status: 200, headers: { "content-type": "application/json" } }))); const env = { RESEND_API_KEY: "test-resend", LUDO_EMAIL_FROM: "LUDO LIVE <mail@example.test>", LUDO_APP_ORIGIN: "https://staging.example.test" }; return { app: new AppData({ storage } as never, env as never), storage }; }
   function latestActionToken(param: "verifyEmail" | "resetPassword") { const calls = (fetch as any).mock.calls; const body = JSON.parse(String(calls[calls.length - 1][1].body)); const href = String(body.html).match(/href="([^"]+)"/)?.[1]; if (!href) throw new Error("Email action link was not generated."); return new URL(href).searchParams.get(param) || ""; }
   it("creates separate identities and isolates bearer sessions", async () => {
     const { app } = setup();
