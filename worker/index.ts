@@ -595,6 +595,7 @@ export class AppData {
             delete user.pendingEmail;delete user.pendingSalt;delete user.pendingPasswordHash;delete user.emailVerificationRequestedAt;
           }
           if(user.email!==entry.email)return null;
+          user.isGuest=false;
           user.emailVerified=true;user.emailVerifiedAt=Date.now();await txn.put("users",users);return {id:user.id,name:user.name,email:user.email,isGuest:false,emailVerified:true};
         });
         return updated?json({user:updated}):fail("This verification link can no longer be used.",409);
