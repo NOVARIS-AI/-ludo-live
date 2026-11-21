@@ -38,7 +38,7 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Room creation overwrites spoofed player IDs and display names with session-owned identity.
 - Replay endpoints hide in-progress matches and return snapshots only after completion.
 
-The automated suite currently contains 48 tests across room gameplay, matchmaking/authentication (including concurrent queue operations, guest identity creation and email linking), realtime hub delivery and authenticated Worker API boundaries. Matchmaking queue mutations are serialized within the lobby Durable Object to prevent overlapping requests from pairing or duplicating queue entries. These are authored tests; the latest CI run must still be checked after each implementation commit, and deployed staging behavior must be verified separately.
+The automated suite currently contains 50 tests across room gameplay, matchmaking/authentication (including concurrent queue operations, guest identity creation, verified email linking, single-use password reset and session revocation), realtime hub delivery and authenticated Worker API boundaries. Matchmaking queue mutations are serialized within the lobby Durable Object to prevent overlapping requests from pairing or duplicating queue entries. These are authored tests; the latest CI run must still be checked after each implementation commit, and deployed staging behavior must be verified separately.
 
 ## Automated deployed staging integration
 
@@ -67,4 +67,17 @@ The automated Worker integration above exercises two independent accounts agains
 
 ## Release gate
 
-Production remains locked until the staging checks above pass and account ownership verification, password reset, TURN relay, moderation operations and abuse monitoring are implemented and reviewed. A green unit-test run alone is not release approval.
+Production remains locked until the staging checks above pass and staging email-provider secrets are configured and real verification/reset emails are tested with both providers, TURN relay, moderation operations and abuse monitoring are implemented and reviewed. A green unit-test run alone is not release approval.
+
+
+## Email security staging checks
+
+1. Configure `RESEND_API_KEY`, `BREVO_API_KEY`, `LUDO_EMAIL_FROM` and `LUDO_APP_ORIGIN` on the staging Worker only; verify the sender with both providers.
+2. Verify Resend receives the first attempt and Brevo is used when Resend is deliberately unavailable or returns a non-success response.
+3. Register a new email account and confirm it remains guest-only until the email link is used.
+4. Upgrade a guest profile and verify the same player ID remains in place before and after email verification.
+5. Confirm verification links expire after 30 minutes and cannot be reused.
+6. Request a password reset for both an existing and unknown address; confirm the public response does not reveal account existence.
+7. Complete a password reset, confirm the link is single-use, and verify all sessions for that account are invalidated.
+8. Confirm unverified accounts cannot create tournaments at the Worker boundary.
+9. Confirm links point only to the staging Pages origin and provider tokens/URLs never appear in Worker logs.
