@@ -114,7 +114,7 @@ describe("MatchmakingLobby contracts", () => {
 });
 
 describe("AppData authentication and session contracts", () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
   function setup() { const storage = new MemoryStorage(); vi.stubGlobal("fetch", vi.fn(async () => Response.json({ id: "email-sent" }))); const env = { RESEND_API_KEY: "test-resend", LUDO_EMAIL_FROM: "LUDO LIVE <mail@example.test>", LUDO_APP_ORIGIN: "https://staging.example.test" }; return { app: new AppData({ storage } as never, env as never), storage }; }
   function latestActionToken(param: "verifyEmail" | "resetPassword") { const calls = (fetch as any).mock.calls; const body = JSON.parse(String(calls[calls.length - 1][1].body)); const href = String(body.html).match(/href="([^"]+)"/)?.[1]; if (!href) throw new Error("Email action link was not generated."); return new URL(href).searchParams.get(param) || ""; }
   it("creates separate identities and isolates bearer sessions", async () => {
@@ -122,7 +122,7 @@ describe("AppData authentication and session contracts", () => {
     const a = await app.fetch(post("/auth/register", { name: "Player One", email: "one@example.test", password: "securepass123" }));
     const b = await app.fetch(post("/auth/register", { name: "Player Two", email: "two@example.test", password: "securepass456" }));
     const one = await a.json<any>(), two = await b.json<any>();
-    expect(a.status).toBe(200); expect(b.status).toBe(200); expect(one.user.id).not.toBe(two.user.id);
+    expect(a.status).toBe(202); expect(b.status).toBe(202); expect(one.user.id).not.toBe(two.user.id);
     const meA = await app.fetch(new Request("https://test/auth/me", { headers: { authorization: "Bearer " + one.token } }));
     const meB = await app.fetch(new Request("https://test/auth/me", { headers: { authorization: "Bearer " + two.token } }));
     expect((await meA.json<any>()).user.id).toBe(one.user.id);
