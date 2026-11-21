@@ -62,3 +62,8 @@ Configure these values on the **staging Worker only** (Cloudflare Dashboard → 
 Do not put provider keys in Git, frontend variables, chat messages, or the repository. Verify the sender/domain with both providers before testing. If neither provider can send, account linking remains guest-only and registration reports a delivery error; no unverified account receives tournament-hosting privileges.
 
 The email endpoints are `/api/auth/verify-email`, `/api/auth/verification/resend`, `/api/auth/password/forgot`, and `/api/auth/password/reset`. Verification and reset links expire after 30 minutes and are single-use. Resend and forgot-password requests are rate-limited and do not disclose whether an address is registered.
+
+
+## Email credential reference
+
+See [EMAIL_KEYS_REFERENCE.md](docs/EMAIL_KEYS_REFERENCE.md) for the purpose of every email credential/configuration value, the player-facing features that use it, safe setup steps, and staging verification requirements. The current staging setup requires Resend plus a verified sender; Brevo is an optional fallback and is not required until it is configured.
