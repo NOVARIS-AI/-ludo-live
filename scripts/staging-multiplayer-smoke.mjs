@@ -33,22 +33,21 @@ function expectStatus(result, status, label) {
 
 async function main() {
   const suffix = `${Date.now()}-${randomUUID().slice(0, 8)}`;
-  const password = `LudoStage-${randomUUID().slice(0, 12)}-A9`;
   const accounts = [
-    { name: "Staging Player One", email: `ludo-stage-one-${suffix}@example.com` },
-    { name: "Staging Player Two", email: `ludo-stage-two-${suffix}@example.com` },
+    { name: "Staging Player One" },
+    { name: "Staging Player Two" },
   ];
   const sessions = [];
   let roomCode = "";
 
   try {
     for (const account of accounts) {
-      const result = await request("/api/auth/register", { body: { ...account, password } });
-      expectStatus(result, 200, `Register ${account.name}`);
+      const result = await request("/api/auth/guest", { body: { name: account.name } });
+      expectStatus(result, 200, `Create guest session for ${account.name}`);
       assert(result.data.user?.id && result.data.token, "Registration did not return a user and bearer token.");
       sessions.push({ ...account, id: result.data.user.id, token: result.data.token });
     }
-    assert(sessions[0].id !== sessions[1].id, "Two staging accounts unexpectedly share one player identity.");
+    assert(sessions[0].id !== sessions[1].id, "Two staging guest sessions unexpectedly share one player identity.");
 
     for (const session of sessions) {
       const me = await request("/api/auth/me", { token: session.token });
@@ -118,7 +117,7 @@ async function main() {
     expectStatus(unauthenticated, 401, "Reject unauthenticated room read");
 
     console.log("STAGING MULTIPLAYER INTEGRATION PASSED");
-    console.log(`- Two independent accounts registered and authenticated: ${sessions.map(s => s.id).join(", ")}`);
+    console.log(`- Two independent guest sessions authenticated: ${sessions.map(s => s.id).join(", ")}`);
     console.log(`- Shared real Durable Object room created and joined: ${roomCode}`);
     console.log("- Host-only start, dice roll, invalid move rejection, legal move/pass and out-of-turn rejection verified.");
     console.log("- Authenticated room read and unauthenticated access rejection verified.");
