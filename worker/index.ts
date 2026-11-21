@@ -541,7 +541,7 @@ export class AppData {
         });
         if(!allowed)return fail("Too many account creation attempts. Please try again in an hour.",429);
         const salt=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,"0")).join("");
-        const user={id:"p_"+crypto.randomUUID(),name,email,isGuest:false,emailVerified:false,salt,passwordHash:await this.passwordHash(password,salt),createdAt:now};
+        const user={id:"p_"+crypto.randomUUID(),name,email,isGuest:true,emailVerified:false,salt,passwordHash:await this.passwordHash(password,salt),createdAt:now};
         const created=await this.state.storage.transaction(async txn=>{
           const users=await txn.get<any[]>("users")||[];if(users.some(u=>u.email===email))return false;
           users.push(user);await txn.put("users",users.slice(-10000));return true;
@@ -551,7 +551,10 @@ export class AppData {
           await this.save("users",(await this.list<any>("users")).filter(u=>u.id!==user.id));
           return fail("Email delivery is not configured or is temporarily unavailable. Please try again later.",503);
         }
-        return json({verificationRequired:true,message:"Check your inbox for a one-time verification link."},202);
+        const sessionToken=this.token(),sessions=await this.list<any>("sessions");
+        sessions.push({tokenHash:await this.digest(sessionToken),userId:user.id,createdAt:now,expiresAt:now+30*24*60*60*1000});
+        await this.save("sessions",sessions.slice(-20000));
+        return json({token:sessionToken,verificationRequired:true,user:{id:user.id,name:user.name,email:"",isGuest:true,emailVerified:false},message:"Check your inbox for a one-time verification link."},202);
       }
       if(path==="/auth/upgrade"&&method==="POST") {
         const bearer=(request.headers.get("authorization")||"").replace(/^Bearer\s+/i,""),current=bearer?await this.session(bearer):null;
