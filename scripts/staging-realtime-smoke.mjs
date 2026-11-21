@@ -66,18 +66,17 @@ async function openSocket(token) {
 
 async function main() {
   const suffix = `${Date.now()}-${randomUUID().slice(0, 8)}`;
-  const password = `LudoRealtime-${randomUUID().slice(0, 12)}-B7`;
   const accounts = [
-    { name: "Realtime Player One", email: `ludo-realtime-one-${suffix}@example.com` },
-    { name: "Realtime Player Two", email: `ludo-realtime-two-${suffix}@example.com` },
+    { name: "Realtime Player One" },
+    { name: "Realtime Player Two" },
   ];
   const sessions = [];
   const sockets = [];
   let roomCode = "";
   try {
     for (const account of accounts) {
-      const result = await request("/api/auth/register", { body: { ...account, password } });
-      expectStatus(result, 200, "Register realtime test player");
+      const result = await request("/api/auth/guest", { body: { name: account.name } });
+      expectStatus(result, 200, "Create realtime guest session");
       assert(result.data.user?.id && result.data.token, "Realtime test registration returned no session.");
       sessions.push({ ...account, id: result.data.user.id, token: result.data.token });
     }
