@@ -458,7 +458,7 @@ type StoredTournament = { id:string; name:string; hostId:string; hostName:string
 type StoredResult = { id:string; roomCode:string; winnerId:string|null; winnerTeam:string|null; gameMode:string; players:Array<{id:string;name:string;teamId?:string}>; completedAt:number; replay:any[] };
 const STORE_ITEMS = [{"id":"ruby-trail","name":"Ruby Trail","category":"Token trail","description":"A vivid ruby glow follows your token across the board.","price":180,"icon":"trail","rarity":"Rare"},{"id":"gold-dice","name":"Golden Dice","category":"Dice skin","description":"A polished golden finish for every roll.","price":320,"icon":"dice","rarity":"Epic"},{"id":"champion-aura","name":"Champion Aura","category":"Token effect","description":"A radiant champion shimmer around your tokens.","price":520,"icon":"token","rarity":"Legendary"},{"id":"midnight-board","name":"Midnight Arena","category":"Board theme","description":"A deep violet board look with luminous details.","price":450,"icon":"board","rarity":"Epic"},{"id":"victory-burst","name":"Victory Burst","category":"Victory effect","description":"Celebrate a finished match with a bright flourish.","price":260,"icon":"victory","rarity":"Rare"},{"id":"royal-frame","name":"Royal Profile Frame","category":"Profile frame","description":"A regal frame for your player identity.","price":200,"icon":"profile","rarity":"Rare"}] as const;
 export class AppData {
-  constructor(private state: DurableObjectState, private env?: Env) {}
+  constructor(private state: DurableObjectState, private env: Env) {}
   private async list<T>(key:string):Promise<T[]> { return await this.state.storage.get<T[]>(key) || []; }
   private async save<T>(key:string,value:T[]) { await this.state.storage.put(key,value); }
   private async digest(value:string):Promise<string> {
@@ -563,6 +563,13 @@ export class AppData {
         const input=await request.json<any>(),email=clean(input.email,254).toLowerCase(),password=typeof input.password==="string"?input.password:"";
         if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return fail("Enter a valid email address.");
         if(password.length<10||password.length>128||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password))return fail("Use a password with at least 10 characters, including letters and numbers.");
+        const now=Date.now(),ip=clean(request.headers.get("cf-connecting-ip"),64)||"unknown";
+        const attemptsAllowed=await this.state.storage.transaction(async txn=>{
+          const attempts=await txn.get<any[]>("emailUpgradeAttempts")||[],recent=attempts.filter(a=>a.at>now-60*60*1000);
+          if(recent.filter(a=>a.userId===current.id).length>=3||(ip!=="unknown"&&recent.filter(a=>a.ip===ip).length>=10))return false;
+          recent.push({userId:current.id,ip,at:now});await txn.put("emailUpgradeAttempts",recent.slice(-5000));return true;
+        });
+        if(!attemptsAllowed)return fail("Too many email-linking attempts. Please try again later.",429);
         const salt=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,"0")).join("");
         const users=await this.list<any>("users"),user=users.find(u=>u.id===current.id);
         if(!user)return fail("Player profile not found.",404);
