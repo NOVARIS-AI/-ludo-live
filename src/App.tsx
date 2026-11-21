@@ -369,7 +369,7 @@ function MediaTile({
 export default function App() {
   const [authUser, setAuthUser] = useState<{ id: string; name: string; email: string; isGuest?: boolean } | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [authMode, setAuthMode] = useState<'guest' | 'login' | 'forgot' | 'reset'>('guest');
+  const [authMode, setAuthMode] = useState<'guest' | 'login' | 'register' | 'forgot' | 'reset'>('guest');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authName, setAuthName] = useState(localStorage.getItem('ludo-live-player-name') || '');
@@ -486,6 +486,23 @@ export default function App() {
         await api.post('/api/auth/password/reset', { token: resetToken, password: resetPassword });
         setAuthMessage('Password updated. Sign in with your new password.');
         setResetPassword(''); setResetToken(''); setAuthMode('login');
+        return;
+      }
+      if (authMode === 'register') {
+        const response = await api.post('/api/auth/register', {
+          name: authName.trim(),
+          email: authEmail.trim(),
+          password: authPassword,
+        });
+        const user = response.data?.user, token = response.data?.token;
+        if (!user?.id || !token || !response.data?.verificationRequired) {
+          throw new Error('Your account could not be created. Please try again.');
+        }
+        setAuthToken(token);
+        setAuthUser(user);
+        setName(user.name || authName.trim());
+        localStorage.setItem('ludo-live-player-name', user.name || authName.trim());
+        setNotice(response.data?.message || 'Your player account is ready. Check your inbox to verify your email; you can keep playing as a guest meanwhile.');
         return;
       }
       const response = authMode === 'guest'
@@ -1284,6 +1301,13 @@ export default function App() {
             <h1>Enter the game</h1>
             <p>Choose your player name and jump straight into LUDO LIVE. No email or password needed.</p>
             <label>Player name<input required minLength={2} maxLength={18} value={authName} onChange={event => setAuthName(event.target.value)} placeholder="Your player name" autoComplete="nickname" /></label>
+          </> : authMode === 'register' ? <>
+            <h1>Create your player account</h1>
+            <p>Keep your player identity across devices. We’ll send a one-time email verification link; your guest access stays active while you verify.</p>
+            <label>Player name<input required minLength={2} maxLength={18} value={authName} onChange={event => setAuthName(event.target.value)} placeholder="Your player name" autoComplete="nickname" /></label>
+            <label>Email address<input required type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>
+            <label>Create password<input required type="password" minLength={10} maxLength={128} autoComplete="new-password" value={authPassword} onChange={event => setAuthPassword(event.target.value)} placeholder="At least 10 characters" /></label>
+            <small>Use at least 10 characters, including letters and numbers.</small>
           </> : authMode === 'login' ? <>
             <h1>Welcome back</h1>
             <p>Sign in to your verified email-linked player account.</p>
@@ -1302,9 +1326,9 @@ export default function App() {
           </>}
           {authError ? <div className="auth-error" role="alert">{authError}</div> : null}
           {authMessage ? <div className="auth-privacy" role="status">{authMessage}</div> : null}
-          <button className="auth-submit" type="submit" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'guest' ? 'PLAY NOW' : authMode === 'login' ? 'SIGN IN' : authMode === 'forgot' ? 'SEND RESET LINK' : 'UPDATE PASSWORD'}</button>
-          {authMode !== 'guest' ? <button className="auth-switch" type="button" onClick={() => { setAuthMode('guest'); setAuthError(''); setAuthMessage(''); }}>Continue with player name instead</button> : <button className="auth-switch" type="button" onClick={() => { setAuthMode('login'); setAuthError(''); setAuthMessage(''); }}>Already have an account? Sign in</button>}
-          {authMode === 'forgot' || authMode === 'reset' ? <button className="auth-switch" type="button" onClick={() => { setAuthMode('login'); setAuthError(''); setAuthMessage(''); }}>Back to sign in</button> : null}
+          <button className="auth-submit" type="submit" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'guest' ? 'PLAY NOW' : authMode === 'login' ? 'SIGN IN' : authMode === 'register' ? 'CREATE ACCOUNT' : authMode === 'forgot' ? 'SEND RESET LINK' : 'UPDATE PASSWORD'}</button>
+          {authMode === 'guest' ? <button className="auth-switch" type="button" onClick={() => { setAuthMode('login'); setAuthError(''); setAuthMessage(''); }}>Already have an account? Sign in</button> : authMode === 'login' ? <button className="auth-switch" type="button" onClick={() => { setAuthMode('register'); setAuthError(''); setAuthMessage(''); }}>New to LUDO LIVE? Create account</button> : authMode !== 'forgot' && authMode !== 'reset' ? <button className="auth-switch" type="button" onClick={() => { setAuthMode('guest'); setAuthError(''); setAuthMessage(''); }}>Continue with player name instead</button> : null}
+          {authMode === 'forgot' || authMode === 'reset' || authMode === 'register' ? <button className="auth-switch" type="button" onClick={() => { setAuthMode('login'); setAuthError(''); setAuthMessage(''); }}>Back to sign in</button> : null}
           <small className="auth-privacy">Email-linked accounts must verify their email address before tournament hosting is unlocked.</small>
         </form>
       </main>
