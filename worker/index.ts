@@ -479,7 +479,7 @@ export class AppData {
     const session=sessions.find(s=>s.tokenHash===hash&&s.expiresAt>Date.now());
     if(!session)return null;
     const users=await this.list<any>("users"), user=users.find(u=>u.id===session.userId);
-    return user?{id:user.id,name:user.name,email:user.email||"",isGuest:user.isGuest===true}:null;
+    return user?{id:user.id,name:user.name,email:user.email||"",isGuest:user.isGuest===true,emailVerified:user.emailVerified===true}:null;
   }
   private async issueEmailAction(kind:"verify"|"reset",userId:string,email:string) {
     if(!this.env?.LUDO_APP_ORIGIN || !this.env.LUDO_EMAIL_FROM) return false;
