@@ -1,4 +1,10 @@
+import { emailActionHtml, sendTransactionalEmail } from "./email";
+
 export interface Env {
+  RESEND_API_KEY?: string;
+  BREVO_API_KEY?: string;
+  LUDO_EMAIL_FROM?: string;
+  LUDO_APP_ORIGIN?: string;
   LUDO_ROOMS: DurableObjectNamespace;
   REALTIME_HUB: DurableObjectNamespace;
   MATCHMAKING: DurableObjectNamespace;
@@ -452,7 +458,7 @@ type StoredTournament = { id:string; name:string; hostId:string; hostName:string
 type StoredResult = { id:string; roomCode:string; winnerId:string|null; winnerTeam:string|null; gameMode:string; players:Array<{id:string;name:string;teamId?:string}>; completedAt:number; replay:any[] };
 const STORE_ITEMS = [{"id":"ruby-trail","name":"Ruby Trail","category":"Token trail","description":"A vivid ruby glow follows your token across the board.","price":180,"icon":"trail","rarity":"Rare"},{"id":"gold-dice","name":"Golden Dice","category":"Dice skin","description":"A polished golden finish for every roll.","price":320,"icon":"dice","rarity":"Epic"},{"id":"champion-aura","name":"Champion Aura","category":"Token effect","description":"A radiant champion shimmer around your tokens.","price":520,"icon":"token","rarity":"Legendary"},{"id":"midnight-board","name":"Midnight Arena","category":"Board theme","description":"A deep violet board look with luminous details.","price":450,"icon":"board","rarity":"Epic"},{"id":"victory-burst","name":"Victory Burst","category":"Victory effect","description":"Celebrate a finished match with a bright flourish.","price":260,"icon":"victory","rarity":"Rare"},{"id":"royal-frame","name":"Royal Profile Frame","category":"Profile frame","description":"A regal frame for your player identity.","price":200,"icon":"profile","rarity":"Rare"}] as const;
 export class AppData {
-  constructor(private state: DurableObjectState) {}
+  constructor(private state: DurableObjectState, private env?: Env) {}
   private async list<T>(key:string):Promise<T[]> { return await this.state.storage.get<T[]>(key) || []; }
   private async save<T>(key:string,value:T[]) { await this.state.storage.put(key,value); }
   private async digest(value:string):Promise<string> {
@@ -475,6 +481,34 @@ export class AppData {
     const users=await this.list<any>("users"), user=users.find(u=>u.id===session.userId);
     return user?{id:user.id,name:user.name,email:user.email||"",isGuest:user.isGuest===true}:null;
   }
+  private async issueEmailAction(kind:"verify"|"reset",userId:string,email:string) {
+    if(!this.env?.LUDO_APP_ORIGIN || !this.env.LUDO_EMAIL_FROM) return false;
+    const token=this.token(),hash=await this.digest(token),now=Date.now();
+    const key=kind==="verify"?"emailVerificationTokens":"passwordResetTokens";
+    const entries=await this.list<any>(key);
+    entries.push({hash,userId,email,createdAt:now,expiresAt:now+30*60*1000});
+    await this.save(key,entries.filter(item=>item.expiresAt>now).slice(-5000));
+    const origin=this.env.LUDO_APP_ORIGIN.replace(/\/$/,"");
+    const actionUrl=origin+"/?"+(kind==="verify"?"verifyEmail=":"resetPassword=")+encodeURIComponent(token);
+    const sent=await sendTransactionalEmail(this.env,email,kind==="verify"?"Verify your LUDO LIVE email":"Reset your LUDO LIVE password",emailActionHtml(kind,actionUrl));
+    if(!sent.ok) {
+      await this.save(key,(await this.list<any>(key)).filter(item=>item.hash!==hash));
+      return false;
+    }
+    return true;
+  }
+  private async consumeEmailAction(kind:"verify"|"reset",token:string) {
+    const key=kind==="verify"?"emailVerificationTokens":"passwordResetTokens";
+    const hash=await this.digest(token),now=Date.now();
+    return this.state.storage.transaction(async txn=>{
+      const entries=await txn.get<any[]>(key)||[];
+      const index=entries.findIndex(item=>item.hash===hash&&item.expiresAt>now);
+      if(index<0) return null;
+      const [entry]=entries.splice(index,1);
+      await txn.put(key,entries);
+      return entry;
+    });
+  }
   async fetch(request:Request) {
     const url=new URL(request.url), method=request.method, path=url.pathname;
     try {
@@ -496,52 +530,88 @@ export class AppData {
         return json({token,user:{id:user.id,name:user.name,email:"",isGuest:true}});
       }
       if(path==="/auth/register"&&method==="POST") {
-        const input=await request.json<any>(), email=clean(input.email,254).toLowerCase(), name=nameOf(input.name), password=typeof input.password==="string"?input.password:"";
+        const input=await request.json<any>(),email=clean(input.email,254).toLowerCase(),name=nameOf(input.name),password=typeof input.password==="string"?input.password:"";
         if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return fail("Enter a valid email address.");
         if(password.length<10||password.length>128||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password))return fail("Use a password with at least 10 characters, including letters and numbers.");
-        const now=Date.now();
-        const ip=clean(request.headers.get("cf-connecting-ip"),64)||"unknown";
+        const now=Date.now(),ip=clean(request.headers.get("cf-connecting-ip"),64)||"unknown";
         const allowed=await this.state.storage.transaction(async txn=>{
-          const attempts=await txn.get<any[]>("registrationAttempts")||[];
-          const recent=attempts.filter(a=>a.at>now-60*60*1000);
-          const emailCount=recent.filter(a=>a.email===email).length;
-          const ipCount=ip==="unknown"?0:recent.filter(a=>a.ip===ip).length;
-          if(emailCount>=3||ipCount>=8)return false;
-          recent.push({email,ip,at:now});
-          await txn.put("registrationAttempts",recent.slice(-5000));
-          return true;
+          const attempts=await txn.get<any[]>("registrationAttempts")||[],recent=attempts.filter(a=>a.at>now-60*60*1000);
+          if(recent.filter(a=>a.email===email).length>=3||(ip!=="unknown"&&recent.filter(a=>a.ip===ip).length>=8))return false;
+          recent.push({email,ip,at:now});await txn.put("registrationAttempts",recent.slice(-5000));return true;
         });
         if(!allowed)return fail("Too many account creation attempts. Please try again in an hour.",429);
         const salt=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,"0")).join("");
-        const user={id:"p_"+crypto.randomUUID(),name,email,isGuest:false,salt,passwordHash:await this.passwordHash(password,salt),createdAt:now};
+        const user={id:"p_"+crypto.randomUUID(),name,email,isGuest:false,emailVerified:false,salt,passwordHash:await this.passwordHash(password,salt),createdAt:now};
         const created=await this.state.storage.transaction(async txn=>{
-          const users=await txn.get<any[]>("users")||[];
-          if(users.some(u=>u.email===email))return false;
-          users.push(user);
-          await txn.put("users",users.slice(-10000));
-          return true;
+          const users=await txn.get<any[]>("users")||[];if(users.some(u=>u.email===email))return false;
+          users.push(user);await txn.put("users",users.slice(-10000));return true;
         });
         if(!created)return fail("An account with this email already exists.",409);
-        const token=this.token(),sessions=await this.list<any>("sessions");
-        sessions.push({tokenHash:await this.digest(token),userId:user.id,createdAt:Date.now(),expiresAt:Date.now()+30*24*60*60*1000});
-        await this.save("sessions",sessions.slice(-20000));
-        return json({token,user:{id:user.id,name:user.name,email:user.email,isGuest:false}});
+        if(!await this.issueEmailAction("verify",user.id,email)){
+          await this.save("users",(await this.list<any>("users")).filter(u=>u.id!==user.id));
+          return fail("Email delivery is not configured or is temporarily unavailable. Please try again later.",503);
+        }
+        return json({verificationRequired:true,message:"Check your inbox for a one-time verification link."},202);
       }
       if(path==="/auth/upgrade"&&method==="POST") {
-        const token=(request.headers.get("authorization")||"").replace(/^Bearer\s+/i,"");
-        const current=token?await this.session(token):null;
+        const bearer=(request.headers.get("authorization")||"").replace(/^Bearer\s+/i,""),current=bearer?await this.session(bearer):null;
         if(!current)return fail("Your player session has expired. Enter your player name again.",401);
-        if(!current.isGuest)return fail("This player profile already has an email account.",409);
+        if(!current.isGuest)return fail("This player profile already has a verified email account.",409);
         const input=await request.json<any>(),email=clean(input.email,254).toLowerCase(),password=typeof input.password==="string"?input.password:"";
         if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return fail("Enter a valid email address.");
         if(password.length<10||password.length>128||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password))return fail("Use a password with at least 10 characters, including letters and numbers.");
         const salt=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,"0")).join("");
         const users=await this.list<any>("users"),user=users.find(u=>u.id===current.id);
         if(!user)return fail("Player profile not found.",404);
-        if(users.some(u=>u.id!==user.id&&u.email===email))return fail("An account with this email already exists.",409);
-        user.email=email;user.salt=salt;user.passwordHash=await this.passwordHash(password,salt);user.isGuest=false;user.emailLinkedAt=Date.now();
+        if(users.some(u=>u.id!==user.id&&(u.email===email||u.pendingEmail===email)))return fail("An account with this email already exists.",409);
+        user.pendingEmail=email;user.pendingSalt=salt;user.pendingPasswordHash=await this.passwordHash(password,salt);user.emailVerificationRequestedAt=Date.now();
         await this.save("users",users);
-        return json({user:{id:user.id,name:user.name,email:user.email,isGuest:false}});
+        if(!await this.issueEmailAction("verify",user.id,email)){
+          const refreshed=await this.list<any>("users"),same=refreshed.find(u=>u.id===user.id);
+          if(same){delete same.pendingEmail;delete same.pendingSalt;delete same.pendingPasswordHash;delete same.emailVerificationRequestedAt;await this.save("users",refreshed);}
+          return fail("Email delivery is not configured or is temporarily unavailable. Your guest profile is unchanged.",503);
+        }
+        return json({verificationRequired:true,user:{id:user.id,name:user.name,email:"",isGuest:true,emailVerificationPending:true},message:"Check your inbox to verify the email. Your player ID and guest access stay active until then."},202);
+      }
+      if(path==="/auth/verify-email"&&method==="POST") {
+        const token=clean((await request.json<any>()).token,200);if(!token)return fail("Verification link is invalid or expired.",400);
+        const entry=await this.consumeEmailAction("verify",token);if(!entry)return fail("Verification link is invalid, expired or already used.",400);
+        const updated=await this.state.storage.transaction(async txn=>{
+          const users=await txn.get<any[]>("users")||[],user=users.find(u=>u.id===entry.userId);
+          if(!user)return null;
+          if(user.pendingEmail){
+            if(users.some(u=>u.id!==user.id&&(u.email===user.pendingEmail||u.pendingEmail===user.pendingEmail)))return null;
+            user.email=user.pendingEmail;user.salt=user.pendingSalt;user.passwordHash=user.pendingPasswordHash;user.isGuest=false;user.emailLinkedAt=Date.now();
+            delete user.pendingEmail;delete user.pendingSalt;delete user.pendingPasswordHash;delete user.emailVerificationRequestedAt;
+          }
+          if(user.email!==entry.email)return null;
+          user.emailVerified=true;user.emailVerifiedAt=Date.now();await txn.put("users",users);return {id:user.id,name:user.name,email:user.email,isGuest:false,emailVerified:true};
+        });
+        return updated?json({user:updated}):fail("This verification link can no longer be used.",409);
+      }
+      if(path==="/auth/password/forgot"&&method==="POST") {
+        const input=await request.json<any>(),email=clean(input.email,254).toLowerCase(),ip=clean(request.headers.get("cf-connecting-ip"),64)||"unknown",now=Date.now();
+        const rate=await this.state.storage.transaction(async txn=>{
+          const attempts=await txn.get<any[]>("passwordResetRequests")||[],recent=attempts.filter(a=>a.at>now-60*60*1000);
+          if(recent.filter(a=>a.email===email).length>=3||(ip!=="unknown"&&recent.filter(a=>a.ip===ip).length>=10))return false;
+          recent.push({email,ip,at:now});await txn.put("passwordResetRequests",recent.slice(-5000));return true;
+        });
+        if(!rate)return fail("Please wait before requesting another reset email.",429);
+        const user=(await this.list<any>("users")).find(u=>u.email===email&&u.emailVerified!==false&&!u.isGuest);
+        if(user)await this.issueEmailAction("reset",user.id,email);
+        return json({ok:true,message:"If an eligible account matches that address, a password-reset link will be sent."});
+      }
+      if(path==="/auth/password/reset"&&method==="POST") {
+        const input=await request.json<any>(),token=clean(input.token,200),password=typeof input.password==="string"?input.password:"";
+        if(password.length<10||password.length>128||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password))return fail("Use a password with at least 10 characters, including letters and numbers.");
+        const entry=token?await this.consumeEmailAction("reset",token):null;if(!entry)return fail("Reset link is invalid, expired or already used.",400);
+        const salt=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,"0")).join("");
+        const changed=await this.state.storage.transaction(async txn=>{
+          const users=await txn.get<any[]>("users")||[],user=users.find(u=>u.id===entry.userId&&u.email===entry.email&&u.emailVerified!==false);
+          if(!user)return false;user.salt=salt;user.passwordHash=await this.passwordHash(password,salt);user.passwordChangedAt=Date.now();
+          await txn.put("users",users);const sessions=await txn.get<any[]>("sessions")||[];await txn.put("sessions",sessions.filter(s=>s.userId!==user.id));return true;
+        });
+        return changed?json({ok:true,message:"Password updated. Sign in with your new password."}):fail("Reset link is invalid or the account is no longer eligible.",400);
       }
       if(path==="/auth/login"&&method==="POST") {
         const input=await request.json<any>(),email=clean(input.email,254).toLowerCase(),password=typeof input.password==="string"?input.password:"";
@@ -553,6 +623,7 @@ export class AppData {
         const users=await this.list<any>("users"),user=users.find(u=>u.email===email);
         const candidate=user?await this.passwordHash(password,user.salt):"";
         if(!user||candidate!==user.passwordHash){attempts.push({email,ip,at:now});await this.save("loginAttempts",attempts.filter(a=>a.at>now-24*60*60*1000).slice(-10000));return fail("Email or password is incorrect.",401);}
+        if(user.emailVerified===false)return fail("Verify your email address before signing in. Check your inbox for the verification link.",403);
         await this.save("loginAttempts",attempts.filter(a=>a.email!==email));
         const token=this.token(),sessions=await this.list<any>("sessions");
         sessions.push({tokenHash:await this.digest(token),userId:user.id,createdAt:Date.now(),expiresAt:Date.now()+30*24*60*60*1000});
