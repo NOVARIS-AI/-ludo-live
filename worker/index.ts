@@ -592,6 +592,18 @@ export class AppData {
         });
         return updated?json({user:updated}):fail("This verification link can no longer be used.",409);
       }
+      if(path==="/auth/verification/resend"&&method==="POST") {
+        const email=clean((await request.json<any>()).email,254).toLowerCase(),ip=clean(request.headers.get("cf-connecting-ip"),64)||"unknown",now=Date.now();
+        const allowed=await this.state.storage.transaction(async txn=>{
+          const attempts=await txn.get<any[]>("verificationResendAttempts")||[],recent=attempts.filter(a=>a.at>now-60*60*1000);
+          if(recent.filter(a=>a.email===email).length>=3||(ip!=="unknown"&&recent.filter(a=>a.ip===ip).length>=10))return false;
+          recent.push({email,ip,at:now});await txn.put("verificationResendAttempts",recent.slice(-5000));return true;
+        });
+        if(!allowed)return fail("Please wait before requesting another verification email.",429);
+        const user=(await this.list<any>("users")).find(u=>u.email===email||u.pendingEmail===email);
+        if(user&&user.emailVerified!==true)await this.issueEmailAction("verify",user.id,email);
+        return json({ok:true,message:"If that address has a pending LUDO LIVE verification, a new link will be sent."});
+      }
       if(path==="/auth/password/forgot"&&method==="POST") {
         const input=await request.json<any>(),email=clean(input.email,254).toLowerCase(),ip=clean(request.headers.get("cf-connecting-ip"),64)||"unknown",now=Date.now();
         const rate=await this.state.storage.transaction(async txn=>{
