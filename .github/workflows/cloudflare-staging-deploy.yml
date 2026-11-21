@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - test/multiplayer-security-suite
   workflow_dispatch:
 
 permissions:
@@ -32,10 +33,14 @@ jobs:
           test -n "$CF_API_TOKEN" || (echo "::error::Missing CLOUDFLARE_API_TOKEN"; exit 1)
           test -n "$CF_ACCOUNT_ID" || (echo "::error::Missing CLOUDFLARE_ACCOUNT_ID"; exit 1)
           test -n "$PAGES_ORIGIN" || (echo "::error::Missing LUDO_STAGING_PAGES_ORIGIN"; exit 1)
+          export PAGES_ORIGIN
+          node -e 'const raw=process.env.PAGES_ORIGIN; let u; try { u=new URL(raw); } catch { console.error("::error::LUDO_STAGING_PAGES_ORIGIN must be a valid HTTPS origin"); process.exit(1); } if (u.protocol !== "https:" || u.origin !== raw || u.pathname !== "/" || u.search || u.hash) { console.error("::error::LUDO_STAGING_PAGES_ORIGIN must contain only the HTTPS scheme and hostname, with no trailing slash or path"); process.exit(1); }'
           test -n "$WORKER_API_URL" || (echo "::error::Missing LUDO_STAGING_WORKER_API_URL"; exit 1)
           test -n "$REALTIME_URL" || (echo "::error::Missing LUDO_STAGING_REALTIME_URL"; exit 1)
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Run multiplayer and security tests
+        run: npm test
       - name: Type-check and build
         env:
           VITE_API_BASE_URL: ${{ secrets.LUDO_STAGING_WORKER_API_URL }}
@@ -60,10 +65,41 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PAGES_ORIGIN: ${{ secrets.LUDO_STAGING_PAGES_ORIGIN }}
-        run: npx wrangler deploy --name ludo-live-api-staging --var "ALLOWED_ORIGIN:$PAGES_ORIGIN"
+          EMAIL_FROM: ${{ secrets.LUDO_EMAIL_FROM }}
+        run: |
+          ARGS=(--name ludo-live-api-staging --var "ALLOWED_ORIGIN:$PAGES_ORIGIN" --var "LUDO_APP_ORIGIN:$PAGES_ORIGIN")
+          if [ -n "$EMAIL_FROM" ]; then ARGS+=(--var "LUDO_EMAIL_FROM:$EMAIL_FROM"); fi
+          npx wrangler deploy "${ARGS[@]}"
+      - name: Configure transactional email provider secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+        run: |
+          if [ -n "$RESEND_API_KEY" ]; then printf '%s' "$RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY --name ludo-live-api-staging; fi
+          if [ -n "$BREVO_API_KEY" ]; then printf '%s' "$BREVO_API_KEY" | npx wrangler secret put BREVO_API_KEY --name ludo-live-api-staging; fi
+
+  staging-multiplayer-test:
+    needs: [validate, deploy-worker]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Exercise deployed Worker with two independent players
+        env:
+          LUDO_STAGING_WORKER_API_URL: ${{ secrets.LUDO_STAGING_WORKER_API_URL }}
+          LUDO_STAGING_PAGES_ORIGIN: ${{ secrets.LUDO_STAGING_PAGES_ORIGIN }}
+        run: |
+          node scripts/staging-multiplayer-smoke.mjs
+          node scripts/staging-realtime-smoke.mjs
 
   deploy-pages:
-    needs: [validate, deploy-worker]
+    needs: [validate, deploy-worker, staging-multiplayer-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

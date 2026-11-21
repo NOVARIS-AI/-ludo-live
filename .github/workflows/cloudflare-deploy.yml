@@ -69,6 +69,8 @@ jobs:
           fi
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Run multiplayer and security tests
+        run: npm test
       - name: Build and type-check
         env:
           PROD_WORKER_API_URL: ${{ secrets.LUDO_LIVE_WORKER_API_URL }}

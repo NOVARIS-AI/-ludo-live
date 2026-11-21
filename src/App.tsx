@@ -367,14 +367,23 @@ function MediaTile({
 }
 
 export default function App() {
-  const [authUser, setAuthUser] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [authUser, setAuthUser] = useState<{ id: string; name: string; email: string; isGuest?: boolean; emailVerified?: boolean } | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'guest' | 'login' | 'register' | 'forgot' | 'reset'>('guest');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
-  const [authName, setAuthName] = useState('');
+  const [authName, setAuthName] = useState(localStorage.getItem('ludo-live-player-name') || '');
   const [authError, setAuthError] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
+  const [resetToken, setResetToken] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
+  const [resendBusy, setResendBusy] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeEmail, setUpgradeEmail] = useState('');
+  const [upgradePassword, setUpgradePassword] = useState('');
+  const [upgradeError, setUpgradeError] = useState('');
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
   const playerId = authUser?.id || 'pending-authentication';
   const [name, setName] = useState(
     localStorage.getItem('ludo-live-player-name') || ''
@@ -427,6 +436,32 @@ export default function App() {
   roomCodeRef.current = room?.code || null;
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const verifyToken = params.get('verifyEmail');
+    const passwordToken = params.get('resetPassword');
+    if (verifyToken) {
+      setAuthBusy(true);
+      api.post('/api/auth/verify-email', { token: verifyToken })
+        .then(async response => {
+          const user = response.data?.user;
+          if (user?.id) {
+            const current = await api.get('/api/auth/me').catch(() => null);
+            if (current?.data?.user?.id) setAuthUser(current.data.user);
+            setAuthMessage('Email verified successfully. Your player profile is now linked.');
+          }
+        })
+        .catch(error => setAuthError(getErrorMessage(error)))
+        .finally(() => setAuthBusy(false));
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    if (passwordToken) {
+      setResetToken(passwordToken);
+      setAuthMode('reset');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     const token = localStorage.getItem('ludo-live-auth-token');
     if (!token) { setAuthLoading(false); return; }
     api.get('/api/auth/me').then(response => {
@@ -440,17 +475,72 @@ export default function App() {
   }, []);
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setAuthBusy(true); setAuthError('');
+    event.preventDefault(); setAuthBusy(true); setAuthError(''); setAuthMessage('');
     try {
-      const endpoint = authMode === 'register' ? '/api/auth/register' : '/api/auth/login';
-      const payload = authMode === 'register' ? { name: authName, email: authEmail, password: authPassword } : { email: authEmail, password: authPassword };
-      const response = await api.post(endpoint, payload);
+      if (authMode === 'forgot') {
+        const response = await api.post('/api/auth/password/forgot', { email: authEmail });
+        setAuthMessage(response.data?.message || 'If an eligible account matches that address, a reset link will be sent.');
+        return;
+      }
+      if (authMode === 'reset') {
+        await api.post('/api/auth/password/reset', { token: resetToken, password: resetPassword });
+        setAuthMessage('Password updated. Sign in with your new password.');
+        setResetPassword(''); setResetToken(''); setAuthMode('login');
+        return;
+      }
+      if (authMode === 'register') {
+        const response = await api.post('/api/auth/register', {
+          name: authName.trim(),
+          email: authEmail.trim(),
+          password: authPassword,
+        });
+        const user = response.data?.user, token = response.data?.token;
+        if (!user?.id || !token || !response.data?.verificationRequired) {
+          throw new Error('Your account could not be created. Please try again.');
+        }
+        setAuthToken(token);
+        setAuthUser({ ...user, email: authEmail.trim(), emailVerified: false });
+        setName(user.name || authName.trim());
+        localStorage.setItem('ludo-live-player-name', user.name || authName.trim());
+        setNotice(response.data?.message || 'Your player account is ready. Check your inbox to verify your email; you can keep playing as a guest meanwhile.');
+        return;
+      }
+      const response = authMode === 'guest'
+        ? await api.post('/api/auth/guest', { name: authName })
+        : await api.post('/api/auth/login', { email: authEmail, password: authPassword });
       const user = response.data?.user, token = response.data?.token;
-      if (!user?.id || !token) throw new Error('The account session could not be created.');
+      if (!user?.id || !token) throw new Error('Your player identity could not be created.');
       setAuthToken(token); setAuthUser(user); setName(user.name || '');
       localStorage.setItem('ludo-live-player-name', user.name || '');
-    } catch (error) { setAuthError(getErrorMessage(error)); }
+    } catch (error) { authErrorSet(error); }
     finally { setAuthBusy(false); }
+  }
+
+  async function resendVerification() {
+    setResendBusy(true); setAuthError(''); setAuthMessage('');
+    try {
+      const email = authUser?.email || authEmail;
+      const response = await api.post('/api/auth/verification/resend', { email });
+      const message = response.data?.message || 'If that address has a pending verification, a new link will be sent.';
+      if (authUser) setNotice(message);
+      else setAuthMessage(message);
+    } catch (error) { authErrorSet(error); }
+    finally { setResendBusy(false); }
+  }
+
+  function authErrorSet(error: unknown) {
+    setAuthError(error instanceof TypeError ? 'Could not reach LUDO LIVE. Check your connection and try again.' : getErrorMessage(error));
+  }
+
+  async function linkPlayerEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setUpgradeBusy(true); setUpgradeError('');
+    try {
+      const response = await api.post('/api/auth/upgrade', { email: upgradeEmail, password: upgradePassword });
+      if (!response.data?.verificationRequired) throw new Error('Your verification email could not be sent.');
+      setUpgradeOpen(false); setUpgradeEmail(''); setUpgradePassword('');
+      setNotice('Verification email sent. Open the link in your inbox to finish linking your email. Your guest profile remains active until then.');
+    } catch (error) { setUpgradeError(error instanceof TypeError ? 'Could not reach LUDO LIVE. Check your connection and try again.' : getErrorMessage(error)); }
+    finally { setUpgradeBusy(false); }
   }
 
   async function signOut() {
@@ -1210,16 +1300,39 @@ export default function App() {
         <form className="auth-card" onSubmit={submitAuth}>
           <div className="auth-brand">LUDO <b>LIVE</b></div>
           <span className="auth-kicker">YOUR PLAYER IDENTITY</span>
-          <h1>{authMode === 'login' ? 'Welcome back' : 'Create your player account'}</h1>
-          <p>Sign in to keep your player profile, progress and matches connected across devices.</p>
-          {authMode === 'register' ? <label>Display name<input required minLength={2} maxLength={24} value={authName} onChange={event => setAuthName(event.target.value)} placeholder="Your player name" /></label> : null}
-          <label>Email address<input required type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>
-          <label>Password<input required type="password" minLength={10} autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} value={authPassword} onChange={event => setAuthPassword(event.target.value)} placeholder={authMode === 'register' ? 'At least 10 characters' : 'Your password'} /></label>
-          {authMode === 'register' ? <small>Use at least 10 characters, with letters and numbers.</small> : null}
+          {authMode === 'guest' ? <>
+            <h1>Enter the game</h1>
+            <p>Choose your player name and jump straight into LUDO LIVE. No email or password needed.</p>
+            <label>Player name<input required minLength={2} maxLength={18} value={authName} onChange={event => setAuthName(event.target.value)} placeholder="Your player name" autoComplete="nickname" /></label>
+          </> : authMode === 'register' ? <>
+            <h1>Create your player account</h1>
+            <p>Keep your player identity across devices. We’ll send a one-time email verification link; your guest access stays active while you verify.</p>
+            <label>Player name<input required minLength={2} maxLength={18} value={authName} onChange={event => setAuthName(event.target.value)} placeholder="Your player name" autoComplete="nickname" /></label>
+            <label>Email address<input required type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>
+            <label>Create password<input required type="password" minLength={10} maxLength={128} autoComplete="new-password" value={authPassword} onChange={event => setAuthPassword(event.target.value)} placeholder="At least 10 characters" /></label>
+            <small>Use at least 10 characters, including letters and numbers.</small>
+          </> : authMode === 'login' ? <>
+            <h1>Welcome back</h1>
+            <p>Sign in to your verified email-linked player account.</p>
+            <label>Email address<input required type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>
+            <label>Password<input required type="password" autoComplete="current-password" value={authPassword} onChange={event => setAuthPassword(event.target.value)} placeholder="Your password" /></label>
+            <button className="auth-switch" type="button" onClick={() => { setAuthMode('forgot'); setAuthError(''); setAuthMessage(''); }}>Forgot password?</button>
+            <button className="auth-switch" type="button" disabled={resendBusy || !authEmail.trim()} onClick={() => void resendVerification()}>{resendBusy ? 'Sending…' : 'Resend verification email'}</button>
+          </> : authMode === 'forgot' ? <>
+            <h1>Reset your password</h1>
+            <p>Enter the email on your LUDO LIVE account. If it matches, we’ll send a secure reset link.</p>
+            <label>Email address<input required type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>
+          </> : <>
+            <h1>Choose a new password</h1>
+            <p>Use at least 10 characters, including letters and numbers.</p>
+            <label>New password<input required type="password" minLength={10} autoComplete="new-password" value={resetPassword} onChange={event => setResetPassword(event.target.value)} placeholder="At least 10 characters" /></label>
+          </>}
           {authError ? <div className="auth-error" role="alert">{authError}</div> : null}
-          <button className="auth-submit" type="submit" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'login' ? 'Sign in' : 'Create account'}</button>
-          <button className="auth-switch" type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }}>{authMode === 'login' ? 'New to Ludo Live? Create an account' : 'Already have an account? Sign in'}</button>
-          <small className="auth-privacy">Passwords are hashed on the server. Keep your sign-in details private.</small>
+          {authMessage ? <div className="auth-privacy" role="status">{authMessage}</div> : null}
+          <button className="auth-submit" type="submit" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'guest' ? 'PLAY NOW' : authMode === 'login' ? 'SIGN IN' : authMode === 'register' ? 'CREATE ACCOUNT' : authMode === 'forgot' ? 'SEND RESET LINK' : 'UPDATE PASSWORD'}</button>
+          {authMode === 'guest' ? <button className="auth-switch" type="button" onClick={() => { setAuthMode('login'); setAuthError(''); setAuthMessage(''); }}>Already have an account? Sign in</button> : authMode === 'login' ? <button className="auth-switch" type="button" onClick={() => { setAuthMode('register'); setAuthError(''); setAuthMessage(''); }}>New to LUDO LIVE? Create account</button> : authMode !== 'forgot' && authMode !== 'reset' ? <button className="auth-switch" type="button" onClick={() => { setAuthMode('guest'); setAuthError(''); setAuthMessage(''); }}>Continue with player name instead</button> : null}
+          {authMode === 'forgot' || authMode === 'reset' || authMode === 'register' ? <button className="auth-switch" type="button" onClick={() => { setAuthMode('login'); setAuthError(''); setAuthMessage(''); }}>Back to sign in</button> : null}
+          <small className="auth-privacy">Email-linked accounts must verify their email address before tournament hosting is unlocked.</small>
         </form>
       </main>
     );
@@ -1253,10 +1366,13 @@ export default function App() {
               <i /> MULTIPLAYER ONLINE
             </span>
             <span className="account-chip">{authUser.name}</span>
+            {authUser.email && authUser.emailVerified === false ? <button className="account-signout" onClick={() => void resendVerification()} disabled={resendBusy}>{resendBusy ? 'SENDING…' : 'VERIFY EMAIL'}</button> : null}
+            {authUser.isGuest && !authUser.email ? <button className="account-signout" onClick={() => { setUpgradeOpen(true); setUpgradeError(""); }}>ADD EMAIL</button> : null}
             <button className="account-signout" onClick={() => void signOut()}>SIGN OUT</button>
           </div>
         </header>
-        {competitionOpen ? <CompetitionHub playerId={playerId} playerName={getPlayerName()} initialTab={competitionTab} onClose={() => setCompetitionOpen(false)} /> : null}
+        {competitionOpen ? <CompetitionHub playerId={playerId} playerName={getPlayerName()} isGuest={!!authUser.isGuest} onUpgrade={() => { setCompetitionOpen(false); setUpgradeOpen(true); }} initialTab={competitionTab} onClose={() => setCompetitionOpen(false)} /> : null}
+        {upgradeOpen ? <div className="auth-screen" role="dialog" aria-modal="true" aria-label="Add email to player profile"><form className="auth-card" onSubmit={linkPlayerEmail}><div className="auth-brand">LUDO <b>LIVE</b></div><span className="auth-kicker">UPGRADE PLAYER PROFILE</span><h1>Keep your player identity</h1><p>Add an email and password so you can sign in to this same player profile on another device and unlock tournament hosting. Your player ID and match history stay the same.</p><label>Email address<input required type="email" autoComplete="email" value={upgradeEmail} onChange={event => setUpgradeEmail(event.target.value)} placeholder="you@example.com" /></label><label>Create password<input required type="password" minLength={10} autoComplete="new-password" value={upgradePassword} onChange={event => setUpgradePassword(event.target.value)} placeholder="At least 10 characters" /></label><small>Use at least 10 characters, including letters and numbers. We’ll email you a one-time verification link; your guest profile remains active until you verify.</small>{upgradeError ? <div className="auth-error" role="alert">{upgradeError}</div> : null}<button className="auth-submit" type="submit" disabled={upgradeBusy}>{upgradeBusy ? "Saving…" : "LINK EMAIL & UNLOCK"}</button><button className="auth-switch" type="button" onClick={() => setUpgradeOpen(false)}>Not now</button></form></div> : null}
         {!competitionOpen && activePage === 'home' ? <section className="home-dashboard">
           <div className="home-welcome"><div><span className="mini-label">WELCOME BACK · LUDO LIVE</span><h1>Ready for your next <em>great game?</em></h1><p>Your table is waiting. Challenge friends, climb the rankings and collect your favourite looks.</p><div className="home-actions"><button className="primary-button" onClick={() => setActivePage('play')}><Gamepad2 size={17}/> Play now</button><button className="secondary-button" onClick={() => setActivePage('store')}><ShoppingBag size={16}/> Visit store</button></div></div><div className="home-hero-art"><div className="home-orbit"><span className="orbit-token orbit-red"/><span className="orbit-token orbit-blue"/><span className="orbit-token orbit-yellow"/><span className="orbit-token orbit-green"/><Dice5 size={78}/></div><span className="home-art-caption">ROLL · PLAY · REPEAT</span></div></div>
           <div className="home-section-heading"><div><span className="mini-label">YOUR LUDO UNIVERSE</span><h2>Make today a game day</h2></div><span className="online-pill"><i/> MULTIPLAYER ONLINE</span></div>

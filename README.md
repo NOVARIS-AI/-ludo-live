@@ -10,13 +10,13 @@ This repository preserves the last successful AppDeploy source snapshot and the 
 - `LudoRoom` Durable Object: room persistence, serialized actions, game rules, computer turns, public/private chat with rate limits and block checks, call signaling and bounded replay snapshots recorded on game-state changes.
 - `RealtimeHub` Durable Object: WebSocket connections, subscriptions and entity-update broadcasts.
 - `MatchmakingLobby` Durable Object: quick 1v1 pairing, status polling, cancellation, queue expiry, blocked-player avoidance and atomically enforced per-account retry throttling.
-- `AppData` Durable Object: tournament creation/join/start/result reporting, global leaderboard, player summaries, block/report records, and a disconnected integration manifest.
+- `AppData` Durable Object: guest-first player identity, optional email/password linking, tournament creation/join/start/result reporting, global leaderboard, player summaries, block/report records, and a disconnected integration manifest.
 - Completed games are copied into persistent match-result storage; replay snapshots remain available through the room replay endpoint.
 
 ## Release status and remaining requirements
-The standalone app now has email/password accounts, PBKDF2 password hashing, expiring bearer sessions, server-owned player IDs and display names, login throttling, authenticated room actions, authenticated matchmaking identity, and short-lived single-use WebSocket tickets. Public/private room chat has server-side rate limits. Call signaling subscriptions are restricted to players who have joined that room's call, and realtime subscription changes are bound to the authenticated socket owner.
+The standalone app now opens with a player-name-only guest entry: the server creates a unique player ID and a 30-day bearer session, so players can enter rooms, play matches and use normal multiplayer features without an email or password. Players can optionally link an email and password later; the same player ID and match history are retained. Tournament creation is restricted at the Worker API boundary to email-linked profiles. Existing email/password accounts remain supported. Passwords are hashed with PBKDF2, sessions expire, login attempts are throttled, room actions and matchmaking identity are authenticated, and WebSocket tickets are short-lived and single-use. Public/private room chat has server-side rate limits. Call signaling subscriptions are restricted to players who have joined that room's call, and realtime subscription changes are bound to the authenticated socket owner.
 
-This is still **staging-ready work, not a production launch**. Email ownership verification and password recovery are not implemented because no email-delivery provider is configured. A TURN relay is still required for reliable WebRTC calls across restrictive networks. Reports are stored, but a staffed moderation and appeal workflow is not included. Blocking is persisted and enforced for new friend requests, private-message send/history, room joins and matchmaking; blocked public-chat messages are filtered from the game chat UI. A 120-second server-side reconnect grace period now preserves a disconnected player's seat; reconnecting clears the expiry alarm, while players who do not return are removed when the Durable Object alarm fires. Automated end-to-end multiplayer tests, abuse monitoring, accessibility review and real-device QA remain required.
+This is still **staging-ready work, not a production launch**. Email ownership verification and password reset are implemented in the staging branch using Resend as the primary sender and Brevo as automatic fallback. New email registrations remain in guest privileges until their one-time verification link is used; guest email upgrades preserve the player ID and stay guest-only until verification. Password-reset requests use generic responses, single-use 30-minute tokens stored as hashes, rate limits, and session revocation after a successful reset. Delivery remains inactive until the staging Worker is configured with provider API keys, a verified sender, and the staging app origin. Existing legacy accounts without an explicit `emailVerified: false` flag remain compatible; newly created accounts must verify. A TURN relay is still required for reliable WebRTC calls across restrictive networks. Reports are stored, but a staffed moderation and appeal workflow is not included. Friend requests resolve both player names from server-owned accounts, reject unknown player IDs, support reciprocal auto-accept, and are rate-limited; players add friends using only a player ID. Blocking is persisted and enforced for friend requests, private-message send/history, room joins and matchmaking; blocked public-chat messages are filtered from the game chat UI. A 120-second server-side reconnect grace period now preserves a disconnected player's seat; reconnecting clears the expiry alarm, while players who do not return are removed when the Durable Object alarm fires. Automated end-to-end multiplayer tests, abuse monitoring, accessibility review and real-device QA remain required.
 
 The AppDeploy production app remains live and untouched. Cloudflare deployment is manual and requires account secrets and staging validation. No secrets, environment values or user records are committed. Cross-app integrations remain disconnected by design.
 
@@ -44,3 +44,26 @@ Wrangler declares SQLite-backed Durable Object classes `LudoRoom`, `RealtimeHub`
 
 ## Browser security configuration
 The Worker intentionally does not use wildcard CORS. The checked-in Wrangler default permits only local Vite development at `http://localhost:5173`. Before publishing the Pages frontend, set the Worker `ALLOWED_ORIGIN` variable to the exact deployed Pages origin (comma-separated exact origins only if multiple frontends are intentionally supported). WebSocket connections enforce the same allowlist. A production deployment with the local-only default will correctly reject the Pages site until this value is changed.
+
+
+## Staging email delivery configuration
+
+The Worker supports two independent transactional email providers:
+- **Resend** is attempted first.
+- **Brevo** is attempted only if Resend is not configured, throws, or returns a non-success response.
+
+Configure these values on the **staging Worker only** (Cloudflare Dashboard → Workers & Pages → `ludo-live-api-staging` → Settings → Variables and Secrets):
+
+- Secret `RESEND_API_KEY`: Resend API key.
+- Secret `BREVO_API_KEY`: Brevo API key.
+- Variable `LUDO_EMAIL_FROM`: sender identity verified with both providers, e.g. `LUDO LIVE <no-reply@your-verified-domain.example>`.
+- Variable `LUDO_APP_ORIGIN`: exact staging Pages origin, e.g. `https://ludo-live-staging.pages.dev` (use the actual staging origin, not production).
+
+Do not put provider keys in Git, frontend variables, chat messages, or the repository. Verify the sender/domain with both providers before testing. If neither provider can send, account linking remains guest-only and registration reports a delivery error; no unverified account receives tournament-hosting privileges.
+
+The email endpoints are `/api/auth/verify-email`, `/api/auth/verification/resend`, `/api/auth/password/forgot`, and `/api/auth/password/reset`. Verification and reset links expire after 30 minutes and are single-use. Resend and forgot-password requests are rate-limited and do not disclose whether an address is registered.
+
+
+## Email credential reference
+
+See [EMAIL_KEYS_REFERENCE.md](docs/EMAIL_KEYS_REFERENCE.md) for the purpose of every email credential/configuration value, the player-facing features that use it, safe setup steps, and staging verification requirements. The current staging setup requires Resend plus a verified sender; Brevo is an optional fallback and is not required until it is configured.

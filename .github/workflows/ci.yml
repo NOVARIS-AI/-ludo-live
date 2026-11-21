@@ -2,12 +2,13 @@ name: Ludo Live CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "test/**"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  build:
+  test-and-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,6 +17,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Run multiplayer and security tests
+        run: npm test
       - name: Build frontend
         run: npm run build
       - name: Type-check frontend

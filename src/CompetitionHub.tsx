@@ -12,7 +12,7 @@ type Tournament = {
 type Leader = { playerId: string; name: string; wins: number; matches: number };
 type SpectatorRoom = { code: string; status: string; players: Array<{ id: string; name: string; color: string }>; state: { turnMessage: string; winner: string | null; currentTurnIndex: number } };
 
-export default function CompetitionHub({ playerId, playerName, initialTab = 'tournaments', onClose }: { playerId: string; playerName: string; initialTab?: 'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'friends' | 'season' | 'connect'; onClose: () => void }) {
+export default function CompetitionHub({ playerId, playerName, isGuest, onUpgrade, initialTab = 'tournaments', onClose }: { playerId: string; playerName: string; isGuest: boolean; onUpgrade: () => void; initialTab?: 'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'friends' | 'season' | 'connect'; onClose: () => void }) {
   const [tab, setTab] = useState<'tournaments' | 'rankings' | 'profile' | 'watch' | 'replay' | 'friends' | 'season' | 'connect'>(initialTab);
   useEffect(() => { setTab(initialTab); }, [initialTab]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -24,7 +24,6 @@ export default function CompetitionHub({ playerId, playerName, initialTab = 'tou
   const [replayData, setReplayData] = useState<any>(null);
   const [friendsData, setFriendsData] = useState<any>({ friends: [], incoming: [], outgoing: [] });
   const [friendId, setFriendId] = useState('');
-  const [friendName, setFriendName] = useState('');
   const [progression, setProgression] = useState<any>(null);
   const [seasonLeaders, setSeasonLeaders] = useState<any[]>([]);
   const [tournamentName, setTournamentName] = useState('');
@@ -86,9 +85,9 @@ export default function CompetitionHub({ playerId, playerName, initialTab = 'tou
     }, 'Tournament result recorded and bracket updated.');
   }
   async function sendFriendRequest() {
-    if (!friendId.trim() || !friendName.trim()) { setMessage('Enter your friend’s player ID and display name.'); return; }
-    await action(() => api.post('/api/friends/request', { playerId, playerName, targetPlayerId: friendId.trim(), targetPlayerName: friendName.trim() }), 'Friend request sent.');
-    setFriendId(''); setFriendName('');
+    if (!friendId.trim()) { setMessage('Enter your friend’s player ID.'); return; }
+    await action(() => api.post('/api/friends/request', { targetPlayerId: friendId.trim() }), 'Friend request sent. The player name is checked automatically.');
+    setFriendId('');
   }
   async function respondFriend(friendshipId: string, accept: boolean) {
     await action(() => api.post('/api/friends/respond', { playerId, friendId: friendshipId, accept }), accept ? 'Friend request accepted.' : 'Friend request declined.');
@@ -131,10 +130,12 @@ export default function CompetitionHub({ playerId, playerName, initialTab = 'tou
       {tab === 'tournaments' ? <div className="competition-grid">
         <div className="competition-card">
           <span className="mini-label">HOST A COMPETITION</span><h3>Create a tournament</h3>
-          <p>Run a free single-elimination bracket with your crew. Players compete in normal Ludo Live rooms and submit completed match codes.</p>
-          <input className="text-field" value={tournamentName} maxLength={42} onChange={event => setTournamentName(event.target.value)} placeholder="Tournament name"/>
-          <select className="text-field" value={maxPlayers} onChange={event => setMaxPlayers(Number(event.target.value))}><option value={4}>4 players</option><option value={8}>8 players</option><option value={16}>16 players</option></select>
-          <button className="primary-button" disabled={busy || tournamentName.trim().length < 3} onClick={() => void createTournament()}><Plus size={16}/> Create tournament</button>
+          {isGuest ? <><p>Playing as a guest is free. Link an email to protect your player identity and unlock tournament hosting.</p><button className="primary-button" onClick={onUpgrade}><ShieldCheck size={16}/> Add email to unlock</button></> : <>
+            <p>Run a free single-elimination bracket with your crew. Players compete in normal Ludo Live rooms and submit completed match codes.</p>
+            <input className="text-field" value={tournamentName} maxLength={42} onChange={event => setTournamentName(event.target.value)} placeholder="Tournament name"/>
+            <select className="text-field" value={maxPlayers} onChange={event => setMaxPlayers(Number(event.target.value))}><option value={4}>4 players</option><option value={8}>8 players</option><option value={16}>16 players</option></select>
+            <button className="primary-button" disabled={busy || tournamentName.trim().length < 3} onClick={() => void createTournament()}><Plus size={16}/> Create tournament</button>
+          </>}
         </div>
         <div className="competition-card">
           <div className="competition-card-title"><div><span className="mini-label">OPEN & LIVE</span><h3>Community tournaments</h3></div><button className="icon-refresh" onClick={() => void load()} aria-label="Refresh"><RefreshCw size={16}/></button></div>
@@ -159,8 +160,8 @@ export default function CompetitionHub({ playerId, playerName, initialTab = 'tou
         {replayData ? <div className="replay-summary"><div className="competition-card-title"><b>Room {replayData.roomCode}</b><span className="status-tag">COMPLETED</span></div><p>Winner: {replayData.players?.find((player:any) => player.id === replayData.winnerId)?.name || (replayData.winnerTeam ? 'Team ' + replayData.winnerTeam : 'Unknown')}</p><div className="replay-events">{(replayData.events || []).map((event:any) => <div className="replay-event" key={event.version}><span className="replay-event-number">{event.version}</span><div><b>{event.turnMessage}</b><small>{new Date(event.at).toLocaleString()} · Turn {Number(event.currentTurnIndex) + 1}{event.dice ? ' · Dice ' + event.dice : ''}</small></div></div>)}</div>{!replayData.events?.length ? <div className="competition-empty">No turn snapshots were saved for this match.</div> : null}</div> : null}
       </div> : null}
       {tab === 'friends' ? <div className="competition-grid">
-        <div className="competition-card"><span className="mini-label">ADD YOUR CREW</span><h3>Send a friend request</h3><p>Share your player ID with friends so they can find and add you.</p><input className="text-field" value={friendId} onChange={event => setFriendId(event.target.value)} placeholder="Friend player ID"/><input className="text-field" maxLength={18} value={friendName} onChange={event => setFriendName(event.target.value)} placeholder="Friend display name"/><button className="primary-button" disabled={busy || !friendId.trim() || !friendName.trim()} onClick={() => void sendFriendRequest()}><UserPlus size={15}/> Send request</button><h4>Your player ID</h4><code className="share-player-id">{playerId}</code></div>
-        <div className="competition-card"><span className="mini-label">YOUR FRIENDS</span><h3>Friends and requests</h3>{friendsData.friends?.length ? friendsData.friends.map((f:any) => <div className="friend-row" key={f.playerId}><b>{f.name}</b><small>{f.playerId}</small></div>) : <div className="competition-empty">Accepted friends will appear here.</div>}<h4>Incoming requests</h4>{friendsData.incoming?.length ? friendsData.incoming.map((f:any) => <div className="friend-row" key={f.id}><div><b>{f.playerName}</b><small>{f.playerId}</small></div><button className="secondary-button" disabled={busy} onClick={() => void respondFriend(f.id,true)}>Accept</button><button className="secondary-button" disabled={busy} onClick={() => void respondFriend(f.id,false)}>Decline</button></div>) : <div className="competition-empty">No pending requests.</div>}</div>
+        <div className="competition-card"><span className="mini-label">ADD YOUR CREW</span><h3>Send a friend request</h3><p>Share your player ID with friends so they can find and add you.</p><input className="text-field" value={friendId} onChange={event => setFriendId(event.target.value.trim())} placeholder="Friend player ID" aria-label="Friend player ID"/><button className="primary-button" disabled={busy || !friendId.trim()} onClick={() => void sendFriendRequest()}><UserPlus size={15}/> Find & send request</button><small>The game checks the player ID and fills in their real display name. No name guessing needed.</small><h4>Your player ID</h4><code className="share-player-id">{playerId}</code></div>
+        <div className="competition-card"><span className="mini-label">YOUR FRIENDS</span><h3>Friends and requests</h3>{friendsData.friends?.length ? friendsData.friends.map((f:any) => <div className="friend-row" key={f.playerId}><b>{f.name}</b><small>{f.playerId}</small></div>) : <div className="competition-empty">Accepted friends will appear here.</div>}<h4>Incoming requests</h4>{friendsData.incoming?.length ? friendsData.incoming.map((f:any) => <div className="friend-row" key={f.id}><div><b>{f.playerName}</b><small>{f.playerId}</small></div><button className="secondary-button" disabled={busy} onClick={() => void respondFriend(f.id,true)}>Accept</button><button className="secondary-button" disabled={busy} onClick={() => void respondFriend(f.id,false)}>Decline</button></div>) : <div className="competition-empty">No pending requests.</div>}<h4>Sent requests</h4>{friendsData.outgoing?.length ? friendsData.outgoing.map((f:any) => <div className="friend-row" key={f.id}><div><b>{f.targetPlayerName}</b><small>{f.targetPlayerId}</small></div><small>Pending</small></div>) : <div className="competition-empty">No sent requests.</div>}</div>
       </div> : null}
       {tab === 'season' ? <div className="competition-card"><span className="mini-label">SEASON RANKINGS</span><h3>Monthly leaderboard</h3><p>Players earn points from completed matches. Rankings reset at the start of each month.</p>{seasonLeaders.length ? seasonLeaders.map((item,index) => <div className="leader-row" key={item.playerId}><b className="leader-rank">#{index+1}</b><span>{item.name}</span><strong>{item.wins} wins</strong><small>{item.points ?? item.wins*100} pts</small></div>) : <div className="competition-empty">Season rankings will appear after completed matches.</div>}</div> : null}
       {tab === 'connect' ? <div className="competition-card"><span className="mini-label">VELTRONIX NEXUS • PLUGIN FOUNDATION</span><h3><Plug size={20}/> Ready for future integrations</h3><p>Ludo Live remains independent. These versioned capabilities prepare approved connections later; no external app is connected today.</p><div className="integration-status"><ShieldCheck size={18}/><span><b>Consent-first API foundation</b><small>Only approved summaries and public tournament data are planned for sharing.</small></span></div><div className="scope-list">{(manifest?.scopes || ['match.summary.read','tournament.summary.read','player.stats.read']).map((scope: string) => <span key={scope}>{scope}</span>)}</div><div className="privacy-note"><b>Never shared by default</b><small>Private messages, camera streams, microphone streams, device contacts and credentials remain outside the integration interface.</small></div><small>API version {manifest?.app?.integrationApiVersion || '1'} · Connected apps: 0</small></div> : null}
