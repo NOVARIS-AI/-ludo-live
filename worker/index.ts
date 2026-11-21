@@ -925,7 +925,7 @@ export default {
     try {
       if (url.pathname === "/api/_healthcheck") return withCors(json({ message: "Success", platform: "cloudflare-workers" }), origin);
       let authenticatedUser: { id: string; name: string; email: string; isGuest?: boolean } | null = null;
-      const isAuthRoute = /^\/api\/auth\/(guest|register|login|me|logout)$/.test(url.pathname);
+      const isAuthRoute = /^\/api\/auth\/(guest|register|login|me|logout|verify-email|password\/forgot|password\/reset)$/.test(url.pathname);
       if (url.pathname.startsWith("/api/") && !isAuthRoute) {
         const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
         if (!token) return withCors(fail("Sign in to continue.", 401), origin);
