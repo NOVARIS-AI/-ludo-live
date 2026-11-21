@@ -42,17 +42,17 @@ The automated suite currently contains 55 tests across room gameplay, matchmakin
 
 ## Automated deployed staging integration
 
-After the staging Worker deploys, the workflow runs `scripts/staging-multiplayer-smoke.mjs` against the configured staging Worker API and Pages origin. It creates two separate temporary test accounts, verifies distinct authenticated identities, creates and joins a real 1v1 Durable Object room, checks host-only start, starts a match, rolls, rejects an invalid token selection, performs a legal move or pass, rejects an out-of-turn roll, verifies the room version advances, and confirms unauthenticated room reads are rejected. Staging Pages deployment is gated on this integration test passing.
+After the staging Worker deploys, the workflow runs `scripts/staging-multiplayer-smoke.mjs` against the configured staging Worker API and Pages origin. It creates two separate temporary guest sessions (so multiplayer integration does not depend on email-provider availability), verifies distinct authenticated identities, creates and joins a real 1v1 Durable Object room, checks host-only start, starts a match, rolls, rejects an invalid token selection, performs a legal move or pass, rejects an out-of-turn roll, verifies the room version advances, and confirms unauthenticated room reads are rejected. Staging Pages deployment is gated on this integration test passing.
 
 The integration script logs out both temporary accounts and attempts to remove both players from the test room. It uses generated staging-only email addresses and does not touch production.
 
-The workflow also runs `scripts/staging-realtime-smoke.mjs` after installing the project dependencies. This second deployed integration test creates two independent accounts, obtains short-lived single-use realtime tickets, opens two authenticated WebSocket connections with the staging Pages Origin, subscribes both connections to the same room, starts the room and requires both sockets to receive the room update. The realtime-ticket endpoint's bearer-header parsing is covered by a Worker API regression test; the deployed WebSocket test additionally validates ticket issuance and consumption end to end.
+The workflow also runs `scripts/staging-realtime-smoke.mjs` after installing the project dependencies. This second deployed integration test creates two independent guest sessions, obtains short-lived single-use realtime tickets, opens two authenticated WebSocket connections with the staging Pages Origin, subscribes both connections to the same room, starts the room and requires both sockets to receive the room update. The realtime-ticket endpoint's bearer-header parsing is covered by a Worker API regression test; the deployed WebSocket test additionally validates ticket issuance and consumption end to end.
 
 ## Required staging checks before a public release
 
 The automated Worker integration above exercises two independent accounts against real staging Durable Objects. Also run these client/UI checks with two separate browser profiles/devices against the staging Pages and Worker URLs:
 
-1. Register two different accounts; verify each receives a distinct player identity.
+1. Create two guest profiles; verify each receives a distinct player identity. Test email registration and verification separately using real inboxes.
 2. Sign in on both devices and create/join a friends room using its invite code.
 3. Confirm spectators cannot issue player actions and a non-host cannot start the match.
 4. Play a complete match, including a six, a legal capture, an invalid move, a no-move pass and a win.
