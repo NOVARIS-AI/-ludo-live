@@ -63,7 +63,20 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PAGES_ORIGIN: ${{ secrets.LUDO_STAGING_PAGES_ORIGIN }}
-        run: npx wrangler deploy --name ludo-live-api-staging --var "ALLOWED_ORIGIN:$PAGES_ORIGIN"
+          EMAIL_FROM: ${{ secrets.LUDO_EMAIL_FROM }}
+        run: |
+          ARGS=(--name ludo-live-api-staging --var "ALLOWED_ORIGIN:$PAGES_ORIGIN" --var "LUDO_APP_ORIGIN:$PAGES_ORIGIN")
+          if [ -n "$EMAIL_FROM" ]; then ARGS+=(--var "LUDO_EMAIL_FROM:$EMAIL_FROM"); fi
+          npx wrangler deploy "${ARGS[@]}"
+      - name: Configure transactional email provider secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+        run: |
+          if [ -n "$RESEND_API_KEY" ]; then printf '%s' "$RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY --name ludo-live-api-staging; fi
+          if [ -n "$BREVO_API_KEY" ]; then printf '%s' "$BREVO_API_KEY" | npx wrangler secret put BREVO_API_KEY --name ludo-live-api-staging; fi
 
   staging-multiplayer-test:
     needs: [validate, deploy-worker]
