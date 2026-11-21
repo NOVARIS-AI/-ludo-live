@@ -81,3 +81,14 @@ Production remains locked until the staging checks above pass and staging email-
 7. Complete a password reset, confirm the link is single-use, and verify all sessions for that account are invalidated.
 8. Confirm unverified accounts cannot create tournaments at the Worker boundary.
 9. Confirm links point only to the staging Pages origin and provider tokens/URLs never appear in Worker logs.
+
+## Transactional email verification and recovery (staging)
+
+- Resend is the primary transactional email provider; Brevo is the automatic fallback when Resend is unavailable or rejects a send.
+- Configure the staging GitHub Actions secrets `RESEND_API_KEY`, `BREVO_API_KEY`, and `LUDO_EMAIL_FROM`. The staging workflow copies provider API keys into Cloudflare Worker secrets and injects the staging Pages origin as `LUDO_APP_ORIGIN`.
+- The sender identity/domain must be verified with the provider(s) before real delivery. Do not use production sender credentials or production callback URLs in staging.
+- Verification and password-reset action tokens are random, stored as SHA-256 hashes, expire after 30 minutes, and are consumed once. Password reset invalidates all sessions for that account.
+- Guest email linking remains pending until verification. The existing player ID, guest access, and match history are preserved; tournament creation stays unavailable until verification.
+- Password-reset requests return the same public response whether or not an eligible account exists. Email actions are rate-limited.
+- Validate both provider paths in staging: successful Resend delivery; forced Resend failure followed by successful Brevo delivery; failure of both providers; expired/replayed tokens; email ownership verification; password-reset session revocation; and tournament creation before/after verification.
+- Never log email action tokens or full action URLs. Keep provider keys in GitHub Actions secrets / Cloudflare Worker secrets only.
