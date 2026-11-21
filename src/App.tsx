@@ -378,6 +378,7 @@ export default function App() {
   const [resetToken, setResetToken] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [authMessage, setAuthMessage] = useState('');
+  const [resendBusy, setResendBusy] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [upgradeEmail, setUpgradeEmail] = useState('');
   const [upgradePassword, setUpgradePassword] = useState('');
@@ -496,6 +497,15 @@ export default function App() {
       localStorage.setItem('ludo-live-player-name', user.name || '');
     } catch (error) { authErrorSet(error); }
     finally { setAuthBusy(false); }
+  }
+
+  async function resendVerification() {
+    setResendBusy(true); setAuthError(''); setAuthMessage('');
+    try {
+      const response = await api.post('/api/auth/verification/resend', { email: authEmail });
+      setAuthMessage(response.data?.message || 'If that address has a pending verification, a new link will be sent.');
+    } catch (error) { authErrorSet(error); }
+    finally { setResendBusy(false); }
   }
 
   function authErrorSet(error: unknown) {
@@ -1280,6 +1290,7 @@ export default function App() {
             <label>Email address<input required type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} placeholder="you@example.com" /></label>
             <label>Password<input required type="password" autoComplete="current-password" value={authPassword} onChange={event => setAuthPassword(event.target.value)} placeholder="Your password" /></label>
             <button className="auth-switch" type="button" onClick={() => { setAuthMode('forgot'); setAuthError(''); setAuthMessage(''); }}>Forgot password?</button>
+            <button className="auth-switch" type="button" disabled={resendBusy || !authEmail.trim()} onClick={() => void resendVerification()}>{resendBusy ? 'Sending…' : 'Resend verification email'}</button>
           </> : authMode === 'forgot' ? <>
             <h1>Reset your password</h1>
             <p>Enter the email on your LUDO LIVE account. If it matches, we’ll send a secure reset link.</p>
