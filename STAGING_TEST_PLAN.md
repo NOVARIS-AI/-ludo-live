@@ -38,7 +38,7 @@ Automated tests run with `npm test` and are part of GitHub Actions CI. The curre
 - Room creation overwrites spoofed player IDs and display names with session-owned identity.
 - Replay endpoints hide in-progress matches and return snapshots only after completion.
 
-The automated suite currently contains 50 tests across room gameplay, matchmaking/authentication (including concurrent queue operations, guest identity creation, verified email linking, single-use password reset and session revocation), realtime hub delivery and authenticated Worker API boundaries. Matchmaking queue mutations are serialized within the lobby Durable Object to prevent overlapping requests from pairing or duplicating queue entries. These are authored tests; the latest CI run must still be checked after each implementation commit, and deployed staging behavior must be verified separately.
+The automated suite currently contains 52 tests across room gameplay, matchmaking/authentication (including concurrent queue operations, guest identity creation, verified email linking, single-use password reset and session revocation), realtime hub delivery and authenticated Worker API boundaries. Matchmaking queue mutations are serialized within the lobby Durable Object to prevent overlapping requests from pairing or duplicating queue entries. These are authored tests; the latest CI run must still be checked after each implementation commit, and deployed staging behavior must be verified separately.
 
 ## Automated deployed staging integration
 
