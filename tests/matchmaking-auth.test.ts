@@ -15,7 +15,7 @@ const post = (path: string, body: unknown, headers?: HeadersInit) => new Request
 });
 
 describe("MatchmakingLobby contracts", () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
   function setup(blocked = false) {
     const storage = new MemoryStorage(), rooms = new Map<string, any>(), created: any[] = [];
     const env = {
@@ -115,7 +115,8 @@ describe("MatchmakingLobby contracts", () => {
 
 describe("AppData authentication and session contracts", () => {
   afterEach(() => vi.useRealTimers());
-  function setup() { const storage = new MemoryStorage(); return { app: new AppData({ storage } as never), storage }; }
+  function setup() { const storage = new MemoryStorage(); vi.stubGlobal("fetch", vi.fn(async () => Response.json({ id: "email-sent" }))); const env = { RESEND_API_KEY: "test-resend", LUDO_EMAIL_FROM: "LUDO LIVE <mail@example.test>", LUDO_APP_ORIGIN: "https://staging.example.test" }; return { app: new AppData({ storage } as never, env as never), storage }; }
+  function latestActionToken(param: "verifyEmail" | "resetPassword") { const calls = (fetch as any).mock.calls; const body = JSON.parse(String(calls[calls.length - 1][1].body)); const href = String(body.html).match(/href="([^"]+)"/)?.[1]; if (!href) throw new Error("Email action link was not generated."); return new URL(href).searchParams.get(param) || ""; }
   it("creates separate identities and isolates bearer sessions", async () => {
     const { app } = setup();
     const a = await app.fetch(post("/auth/register", { name: "Player One", email: "one@example.test", password: "securepass123" }));
@@ -151,10 +152,16 @@ describe("AppData authentication and session contracts", () => {
       password: "securepass789",
     }, { authorization: "Bearer " + guest.token }));
     const linked = await upgrade.json<any>();
-    expect(upgrade.status).toBe(200);
+    expect(upgrade.status).toBe(202);
+    expect(linked.verificationRequired).toBe(true);
     expect(linked.user.id).toBe(guest.user.id);
-    expect(linked.user.email).toBe("upgrade@example.test");
-    expect(linked.user.isGuest).toBe(false);
+    expect(linked.user.isGuest).toBe(true);
+    const verify = await app.fetch(post("/auth/verify-email", { token: latestActionToken("verifyEmail") }));
+    const verified = await verify.json<any>();
+    expect(verify.status).toBe(200);
+    expect(verified.user.id).toBe(guest.user.id);
+    expect(verified.user.email).toBe("upgrade@example.test");
+    expect(verified.user.isGuest).toBe(false);
     const me = await app.fetch(new Request("https://test/auth/me", { headers: { authorization: "Bearer " + guest.token } }));
     const mePayload = await me.json<any>();
     expect(mePayload.user.id).toBe(guest.user.id);
@@ -170,6 +177,41 @@ describe("AppData authentication and session contracts", () => {
     const duplicate = await app.fetch(post("/auth/upgrade", { email: "taken@example.test", password: "securepass456" }, { authorization: "Bearer " + guest.token }));
     expect(weak.status).toBe(400);
     expect(duplicate.status).toBe(409);
+  });
+
+  it("requires mailbox verification before sign-in and unlocks the same account after verification", async () => {
+    const { app } = setup();
+    const registered = await app.fetch(post("/auth/register", { name: "Verify Player", email: "verify@example.test", password: "securepass123" }));
+    const payload = await registered.json<any>();
+    expect(registered.status).toBe(202);
+    expect(payload.user.isGuest).toBe(true);
+    const blockedLogin = await app.fetch(post("/auth/login", { email: "verify@example.test", password: "securepass123" }));
+    expect(blockedLogin.status).toBe(403);
+    const verified = await app.fetch(post("/auth/verify-email", { token: latestActionToken("verifyEmail") }));
+    expect(verified.status).toBe(200);
+    expect((await verified.json<any>()).user.emailVerified).toBe(true);
+    const login = await app.fetch(post("/auth/login", { email: "verify@example.test", password: "securepass123" }));
+    expect(login.status).toBe(200);
+    expect((await login.json<any>()).user.isGuest).toBe(false);
+  });
+
+  it("sends password reset with a single-use token and revokes existing sessions", async () => {
+    const { app } = setup();
+    const registered = await app.fetch(post("/auth/register", { name: "Reset Player", email: "reset@example.test", password: "securepass123" }));
+    const signup = await registered.json<any>();
+    const verified = await app.fetch(post("/auth/verify-email", { token: latestActionToken("verifyEmail") }));
+    expect(verified.status).toBe(200);
+    const forgot = await app.fetch(post("/auth/password/forgot", { email: "reset@example.test" }));
+    expect(forgot.status).toBe(200);
+    const resetToken = latestActionToken("resetPassword");
+    const reset = await app.fetch(post("/auth/password/reset", { token: resetToken, password: "newsecurepass456" }));
+    expect(reset.status).toBe(200);
+    const replay = await app.fetch(post("/auth/password/reset", { token: resetToken, password: "anothersecure789" }));
+    expect(replay.status).toBe(400);
+    const oldSession = await app.fetch(new Request("https://test/auth/me", { headers: { authorization: "Bearer " + signup.token } }));
+    expect(oldSession.status).toBe(401);
+    const login = await app.fetch(post("/auth/login", { email: "reset@example.test", password: "newsecurepass456" }));
+    expect(login.status).toBe(200);
   });
 
   it("resolves friend request names from stored player accounts, not client input", async () => {
