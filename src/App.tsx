@@ -1367,7 +1367,7 @@ export default function App() {
             </span>
             <span className="account-chip">{authUser.name}</span>
             {authUser.email && authUser.emailVerified === false ? <button className="account-signout" onClick={() => void resendVerification()} disabled={resendBusy}>{resendBusy ? 'SENDING…' : 'VERIFY EMAIL'}</button> : null}
-            {authUser.isGuest ? <button className="account-signout" onClick={() => { setUpgradeOpen(true); setUpgradeError(""); }}>ADD EMAIL</button> : null}
+            {authUser.isGuest && !authUser.email ? <button className="account-signout" onClick={() => { setUpgradeOpen(true); setUpgradeError(""); }}>ADD EMAIL</button> : null}
             <button className="account-signout" onClick={() => void signOut()}>SIGN OUT</button>
           </div>
         </header>
