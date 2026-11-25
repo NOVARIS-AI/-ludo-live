@@ -15,7 +15,6 @@ type Room = {
   callParticipants: string[]; version: number; createdAt: number; lastActivity: number;
   replaySnapshots: Array<{ version: number; at: number; turnMessage: string; currentTurnIndex: number; dice: number | null; tokens: Record<string, number[]>; winner: string | null; winnerTeam?: string | null }>;
   disconnectedAt?: Record<string, number>;
-  recentActionIds?: string[];
 };
 const colors = ["red", "blue", "yellow", "green"];
 const starts: Record<string, number> = { red: 1, blue: 14, yellow: 27, green: 40 };
@@ -208,11 +207,13 @@ export class LudoRoom {
     const playerId = clean(input.playerId);
     const action = body.action;
     const actionId = clean(input.actionId, 120);
-    if (actionId && (room.recentActionIds || []).includes(actionId)) return json({ room, duplicate: true });
+    const receiptKey = playerId + ":" + actionId;
+    const actionReceipts = await this.state.storage.get<string[]>("action-receipts") || [];
+    if (actionId && actionReceipts.includes(receiptKey)) return json({ room, duplicate: true });
     if (["start", "roll", "move", "pass"].includes(action) && input.expectedVersion !== undefined && Number(input.expectedVersion) !== room.version) {
       return fail("The match changed just now. Your board has been refreshed; try the action again.", 409);
     }
-    if (actionId) room.recentActionIds = [...(room.recentActionIds || []).slice(-99), actionId];
+    if (actionId) await this.state.storage.put("action-receipts", [...actionReceipts.slice(-499), receiptKey]);
     if (action !== "chat" && action !== "private-chat" && action !== "private-chat/list" && action !== "signal") {
       const rateKey = "action-rate:" + playerId;
       const now = Date.now();
