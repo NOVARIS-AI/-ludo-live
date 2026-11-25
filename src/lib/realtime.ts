@@ -41,7 +41,7 @@ function createConnection(): RealtimeConnection {
   const rejectInitial = (message: string) => rejectReady(new Error(message));
   const scheduleReconnect = () => {
     if (disconnected || reconnectTimer) return;
-    const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempts, 5));
+    const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempts, 5)) + Math.floor(Math.random() * 350);
     attempts += 1;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;

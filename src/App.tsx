@@ -518,7 +518,15 @@ export default function App() {
         setNotice('This room has closed.');
       }
     });
-    connection.onOpen(() => setSocketState('live'));
+    connection.onOpen(() => {
+      setSocketState('live');
+      const activeCode = roomCodeRef.current;
+      if (activeCode) {
+        api.get('/api/rooms/' + activeCode)
+          .then(response => { if (response.data?.room) setRoom(response.data.room as Room); })
+          .catch(() => setSocketState('offline'));
+      }
+    });
     connection.onClose(() => setSocketState('offline'));
     connection.onError(() => setSocketState('offline'));
     connection.ready
@@ -775,7 +783,16 @@ export default function App() {
     setBusy(true);
     setNotice('');
     try {
-      const response = await api.post(path, { ...body, playerId });
+      const isTurnAction = /\/(start|roll|move|pass)$/.test(path);
+      const actionId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : 'act-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+      const response = await api.post(path, {
+        ...body,
+        playerId,
+        actionId,
+        ...(isTurnAction && room ? { expectedVersion: room.version } : {}),
+      });
       if (response.data?.room) setRoom(response.data.room as Room);
       if (response.data?.closed) {
         setRoom(null);
@@ -783,6 +800,11 @@ export default function App() {
       }
       return response.data;
     } catch (error) {
+      if ((error as any)?.response?.status === 409 && roomCodeRef.current) {
+        api.get('/api/rooms/' + roomCodeRef.current)
+          .then(response => { if (response.data?.room) setRoom(response.data.room as Room); })
+          .catch(() => undefined);
+      }
       setNotice(getErrorMessage(error));
       return null;
     } finally {
@@ -790,7 +812,7 @@ export default function App() {
     }
   }
 
-  async function createRoom() {
+  async function createRoom()
     const playerName = getPlayerName();
     setBusy(true);
     setNotice('');

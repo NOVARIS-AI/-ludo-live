@@ -15,6 +15,7 @@ type Room = {
   callParticipants: string[]; version: number; createdAt: number; lastActivity: number;
   replaySnapshots: Array<{ version: number; at: number; turnMessage: string; currentTurnIndex: number; dice: number | null; tokens: Record<string, number[]>; winner: string | null; winnerTeam?: string | null }>;
   disconnectedAt?: Record<string, number>;
+  recentActionIds?: string[];
 };
 const colors = ["red", "blue", "yellow", "green"];
 const starts: Record<string, number> = { red: 1, blue: 14, yellow: 27, green: 40 };
@@ -175,6 +176,13 @@ export class LudoRoom {
     const hub = this.env.REALTIME_HUB.get(this.env.REALTIME_HUB.idFromName("global"));
     await hub.fetch("https://hub/broadcast", { method: "POST", body: JSON.stringify({ v: 1, type: "entity.update", payload: { entity_type: type, entity_id: id, data } }) });
   }
+  private async audit(roomCode: string, playerId: string, event: string, detail: string) {
+    const key = "security-events:" + roomCode;
+    const now = Date.now();
+    const events = await this.state.storage.get<Array<{ at: number; playerId: string; event: string; detail: string }>>(key) || [];
+    events.push({ at: now, playerId: clean(playerId, 100), event: clean(event, 48), detail: clean(detail, 120) });
+    await this.state.storage.put(key, events.filter(item => item.at > now - 30 * 24 * 60 * 60 * 1000).slice(-300));
+  }
   private async save(room: Room, beforeState?: string) {
     const nextVersion = room.version + 1;
     if (beforeState !== undefined && beforeState !== JSON.stringify([room.state, room.status])) {
@@ -199,6 +207,23 @@ export class LudoRoom {
     const beforeState = JSON.stringify([room.state, room.status]);
     const playerId = clean(input.playerId);
     const action = body.action;
+    const actionId = clean(input.actionId, 120);
+    if (actionId && (room.recentActionIds || []).includes(actionId)) return json({ room, duplicate: true });
+    if (["start", "roll", "move", "pass"].includes(action) && input.expectedVersion !== undefined && Number(input.expectedVersion) !== room.version) {
+      return fail("The match changed just now. Your board has been refreshed; try the action again.", 409);
+    }
+    if (actionId) room.recentActionIds = [...(room.recentActionIds || []).slice(-99), actionId];
+    if (action !== "chat" && action !== "private-chat" && action !== "private-chat/list" && action !== "signal") {
+      const rateKey = "action-rate:" + playerId;
+      const now = Date.now();
+      const recent = (await this.state.storage.get<number[]>(rateKey) || []).filter(at => at > now - 10_000);
+      if (recent.length >= 40) return fail("Too many game actions. Please slow down and try again.", 429);
+      recent.push(now);
+      await this.state.storage.put(rateKey, recent);
+    }
+    if (["roll", "move", "pass"].includes(action) && room.players[room.state.currentTurnIndex]?.id !== playerId) {
+      await this.audit(room.code, playerId, "out_of_turn_action", action);
+    }
     if (action === "join") {
       const name = nameOf(input.name);
       if (room.players.some(p => p.id === playerId)) return json({ room });
@@ -223,7 +248,7 @@ export class LudoRoom {
     if (action === "roll") {
       const index = requirePlayer(room, playerId);
       if (room.status !== "playing") return fail("The match is not active.");
-      if (index !== room.state.currentTurnIndex) return fail("It is not your turn yet.", 403);
+      if (index !== room.state.currentTurnIndex) { await this.audit(room.code, playerId, "out_of_turn_roll", "roll"); return fail("It is not your turn yet.", 403); }
       if (room.state.dice !== null) return fail("Move a token or pass before rolling again.");
       const dice = Math.floor(Math.random() * 6) + 1;
       room.state.lastRoll = dice;
@@ -238,10 +263,12 @@ export class LudoRoom {
     }
     if (action === "move") {
       const index = requirePlayer(room, playerId);
-      if (room.status !== "playing" || index !== room.state.currentTurnIndex) return fail("It is not your active turn.", 403);
+      if (room.status !== "playing") return fail("The match is not active.");
+      if (index !== room.state.currentTurnIndex) { await this.audit(room.code, playerId, "out_of_turn_move", "move"); return fail("It is not your active turn.", 403); }
       const tokenIndex = Number(input.tokenIndex), dice = room.state.dice;
-      if (!Number.isInteger(tokenIndex) || tokenIndex < 0 || tokenIndex > 3) return fail("Choose one of your four tokens.");
+      if (!Number.isInteger(tokenIndex) || tokenIndex < 0 || tokenIndex > 3) { await this.audit(room.code, playerId, "invalid_token_index", String(input.tokenIndex)); return fail("Choose one of your four tokens."); }
       if (dice === null) return fail("Roll the dice before moving.");
+      if (!validMoves(room, playerId, dice).includes(tokenIndex)) { await this.audit(room.code, playerId, "illegal_token_move", "token:" + tokenIndex + ",dice:" + dice); return fail("That token cannot make the current legal move."); }
       const player = room.players[index], captured = moveToken(room, player, tokenIndex, dice);
       const playerWon = room.state.tokens[player.id].every(p => p === 57);
       const teamWon = room.gameMode === "duo" && room.players.filter(p => p.teamId === player.teamId).every(p => room.state.tokens[p.id].every(n => n === 57));
@@ -258,7 +285,7 @@ export class LudoRoom {
     }
     if (action === "pass") {
       const index = requirePlayer(room, playerId), dice = room.state.dice;
-      if (index !== room.state.currentTurnIndex || dice === null) return fail("You cannot pass right now.");
+      if (index !== room.state.currentTurnIndex || dice === null) { await this.audit(room.code, playerId, "invalid_pass", "pass"); return fail("You cannot pass right now."); }
       if (validMoves(room, playerId, dice).length) return fail("You still have a legal move.");
       room.state.dice = null; room.state.consecutiveSixes = 0; room.state.currentTurnIndex = nextPlayer(room, index);
       room.state.turnMessage = "No legal move. " + room.players[room.state.currentTurnIndex].name + " is up next.";
