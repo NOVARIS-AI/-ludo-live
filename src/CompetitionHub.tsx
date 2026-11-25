@@ -51,13 +51,36 @@ export default function CompetitionHub({ playerId, playerName, initialTab = 'tou
       setSummary(p.data);
       setManifest(m.data);
       setProgression(g.data);
-      setFriendsData(f.data);
+      const friendIds = (f.data.friends || []).map((friend: any) => friend.playerId);
+      const presence = friendIds.length
+        ? await api.get('/api/presence?ids=' + encodeURIComponent(friendIds.join(',')))
+        : { data: { onlinePlayerIds: [] } };
+      const onlineIds = new Set(presence.data.onlinePlayerIds || []);
+      setFriendsData({
+        ...f.data,
+        friends: (f.data.friends || []).map((friend: any) => ({ ...friend, online: onlineIds.has(friend.playerId) })),
+      });
       setSeasonLeaders(season.data.leaderboard || []);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not load competition data.');
     }
   }
   useEffect(() => { void load(); }, [playerId]);
+  useEffect(() => {
+    const timer = window.setInterval(async () => {
+      const ids = (friendsData.friends || []).map((friend: any) => friend.playerId);
+      if (!ids.length) return;
+      try {
+        const response = await api.get('/api/presence?ids=' + encodeURIComponent(ids.join(',')));
+        const onlineIds = new Set(response.data.onlinePlayerIds || []);
+        setFriendsData((current: any) => ({
+          ...current,
+          friends: (current.friends || []).map((friend: any) => ({ ...friend, online: onlineIds.has(friend.playerId) })),
+        }));
+      } catch { /* Keep the last known presence if a poll fails. */ }
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [friendsData.friends]);
   useEffect(() => {
     if (!replayPlaying || !replayData?.events?.length) return;
     const timer = window.setInterval(() => setReplayIndex(index => index + 1), 1200);
@@ -179,7 +202,7 @@ export default function CompetitionHub({ playerId, playerName, initialTab = 'tou
       </div> : null}
       {tab === 'friends' ? <div className="competition-grid">
         <div className="competition-card"><span className="mini-label">ADD YOUR CREW</span><h3>Send a friend request</h3><p>Share your player ID with friends so they can find and add you.</p><input className="text-field" value={friendId} onChange={event => setFriendId(event.target.value)} placeholder="Friend player ID"/><input className="text-field" maxLength={18} value={friendName} onChange={event => setFriendName(event.target.value)} placeholder="Friend display name"/><button className="primary-button" disabled={busy || !friendId.trim() || !friendName.trim()} onClick={() => void sendFriendRequest()}><UserPlus size={15}/> Send request</button><h4>Your player ID</h4><code className="share-player-id">{playerId}</code></div>
-        <div className="competition-card"><span className="mini-label">YOUR FRIENDS</span><h3>Friends and requests</h3>{friendsData.friends?.length ? friendsData.friends.map((f:any) => <div className="friend-row" key={f.playerId}><b>{f.name}</b><small>{f.playerId}</small></div>) : <div className="competition-empty">Accepted friends will appear here.</div>}<h4>Incoming requests</h4>{friendsData.incoming?.length ? friendsData.incoming.map((f:any) => <div className="friend-row" key={f.id}><div><b>{f.playerName}</b><small>{f.playerId}</small></div><button className="secondary-button" disabled={busy} onClick={() => void respondFriend(f.id,true)}>Accept</button><button className="secondary-button" disabled={busy} onClick={() => void respondFriend(f.id,false)}>Decline</button></div>) : <div className="competition-empty">No pending requests.</div>}<h4>Sent requests</h4>{friendsData.outgoing?.length ? friendsData.outgoing.map((f:any) => <div className="friend-row" key={f.id}><b>{f.targetPlayerName}</b><small>Waiting for a response · {f.targetPlayerId}</small></div>) : <div className="competition-empty">No outgoing requests.</div>}</div>
+        <div className="competition-card"><span className="mini-label">YOUR FRIENDS</span><h3>Friends and requests</h3>{friendsData.friends?.length ? friendsData.friends.map((f:any) => <div className="friend-row" key={f.playerId}><b>{f.name}</b><small>{f.online ? '● Online now' : '○ Offline'} · {f.playerId}</small></div>) : <div className="competition-empty">Accepted friends will appear here.</div>}<h4>Incoming requests</h4>{friendsData.incoming?.length ? friendsData.incoming.map((f:any) => <div className="friend-row" key={f.id}><div><b>{f.playerName}</b><small>{f.playerId}</small></div><button className="secondary-button" disabled={busy} onClick={() => void respondFriend(f.id,true)}>Accept</button><button className="secondary-button" disabled={busy} onClick={() => void respondFriend(f.id,false)}>Decline</button></div>) : <div className="competition-empty">No pending requests.</div>}<h4>Sent requests</h4>{friendsData.outgoing?.length ? friendsData.outgoing.map((f:any) => <div className="friend-row" key={f.id}><b>{f.targetPlayerName}</b><small>Waiting for a response · {f.targetPlayerId}</small></div>) : <div className="competition-empty">No outgoing requests.</div>}</div>
       </div> : null}
       {tab === 'season' ? <div className="competition-card"><span className="mini-label">SEASON RANKINGS</span><h3>Monthly leaderboard</h3><p>Players earn points from completed matches. Rankings reset at the start of each month.</p>{seasonLeaders.length ? seasonLeaders.map((item,index) => <div className="leader-row" key={item.playerId}><b className="leader-rank">#{index+1}</b><span>{item.name}</span><strong>{item.wins} wins</strong><small>{item.points ?? item.wins*100} pts</small></div>) : <div className="competition-empty">Season rankings will appear after completed matches.</div>}</div> : null}
       {tab === 'connect' ? <div className="competition-card"><span className="mini-label">VELTRONIX NEXUS • PLUGIN FOUNDATION</span><h3><Plug size={20}/> Ready for future integrations</h3><p>Ludo Live remains independent. These versioned capabilities prepare approved connections later; no external app is connected today.</p><div className="integration-status"><ShieldCheck size={18}/><span><b>Consent-first API foundation</b><small>Only approved summaries and public tournament data are planned for sharing.</small></span></div><div className="scope-list">{(manifest?.scopes || ['match.summary.read','tournament.summary.read','player.stats.read']).map((scope: string) => <span key={scope}>{scope}</span>)}</div><div className="privacy-note"><b>Never shared by default</b><small>Private messages, camera streams, microphone streams, device contacts and credentials remain outside the integration interface.</small></div><small>API version {manifest?.app?.integrationApiVersion || '1'} · Connected apps: 0</small></div> : null}

@@ -742,6 +742,11 @@ export class RealtimeHub {
   constructor(private state: DurableObjectState, private env: Env) {}
   async fetch(request: Request) {
     const url = new URL(request.url);
+    if (url.pathname === "/presence" && request.method === "GET") {
+      const requested = (url.searchParams.get("ids") || "").split(",").map(id => clean(id, 100)).filter(Boolean).slice(0, 100);
+      const online = new Set(this.state.getWebSockets().map(socket => (socket.deserializeAttachment() as any)?.userId).filter(Boolean));
+      return json({ onlinePlayerIds: requested.filter(id => online.has(id)) });
+    }
     if (url.pathname === "/connect") {
       const connectionId = clean(url.searchParams.get("connection_id"));
       if (!connectionId) return fail("connection_id is required.");
@@ -841,6 +846,12 @@ export default {
         target.searchParams.set("connection_id", url.searchParams.get("connection_id") || "");
         target.searchParams.set("user_id", authPayload.user.id);
         return hub.fetch(new Request(target, request));
+      }
+      if (url.pathname === "/api/presence" && request.method === "GET") {
+        const hub = env.REALTIME_HUB.get(env.REALTIME_HUB.idFromName("global"));
+        const target = new URL("https://hub/presence");
+        target.searchParams.set("ids", url.searchParams.get("ids") || "");
+        return withCors(await hub.fetch(target), origin);
       }
       if (url.pathname === "/api/subscriptions" || url.pathname === "/api/subscriptions/remove") {
         const body = await request.json<any>();
