@@ -59,6 +59,15 @@ export default function CompetitionHub({ playerId, playerName, initialTab = 'tou
   }
   useEffect(() => { void load(); }, [playerId]);
   useEffect(() => {
+    if (!replayPlaying || !replayData?.events?.length) return;
+    const timer = window.setInterval(() => setReplayIndex(index => index + 1), 1200);
+    return () => window.clearInterval(timer);
+  }, [replayPlaying, replayData?.events?.length]);
+  useEffect(() => {
+    const count = replayData?.events?.length || 0;
+    if (count && replayIndex >= count - 1) setReplayPlaying(false);
+  }, [replayIndex, replayData?.events?.length]);
+  useEffect(() => {
     if (!spectatorRoom) return;
     const timer = window.setInterval(async () => {
       try {
