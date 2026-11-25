@@ -812,7 +812,7 @@ export default function App() {
     }
   }
 
-  async function createRoom()
+  async function createRoom() {
     const playerName = getPlayerName();
     setBusy(true);
     setNotice('');
